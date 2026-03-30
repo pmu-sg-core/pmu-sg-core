@@ -1,5 +1,17 @@
 {
   "name": "pmu-sg-core",
   "version": "0.1.0",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "lucide-react": "^1.7.0",
+    "next": "^16.2.1",
+    "reach": "^1.0.1",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.2"
+  }
 }
