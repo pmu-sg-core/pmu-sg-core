@@ -1,13 +1,16 @@
--- Enable the pgvector extension to work with embeddings
+-- Enable pgvector for agentic reasoning
 CREATE EXTENSION IF NOT EXISTS vector;
 
-CREATE TABLE IF NOT EXISTS miyu_memory (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL,
-    content TEXT NOT NULL,
-    embedding VECTOR(1536), -- Optimized for OpenAI/Gemini embeddings
-    metadata JSONB,
-    created_at TIMESTAMPTZ DEFAULT now()
+CREATE TABLE miyu_memory (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  actor_bsuid TEXT REFERENCES profiles(bsuid),
+  content TEXT NOT NULL,
+  embedding vector(1536), -- Optimized for OpenAI/Azure OpenAI embeddings
+  metadata JSONB,         -- Stores WhatsApp Message ID, Source (Voice/Text)
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX ON miyu_memory USING ivfflat (embedding vector_cosine_ops);
+-- Index for high-velocity vector search
+CREATE INDEX ON miyu_memory USING ivfflat (embedding vector_cosine_ops)
+WITH (lists = 100);

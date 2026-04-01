@@ -2,31 +2,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateWhatsAppSignature } from '@/lib/security/webhook-validator';
 
+
 export async function POST(req: NextRequest) {
-  const payload = await req.text();
+  const payload = await req.text(); // 1. Get raw string for security check
   const signature = req.headers.get('x-hub-signature-256') || '';
   const appSecret = process.env.WHATSAPP_APP_SECRET!;
 
-  // 1. Security Check
+  // Security Check
   if (!validateWhatsAppSignature(payload, signature, appSecret)) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
-  const data = JSON.parse(payload);
+  // --- THE FIX STARTS HERE ---
+  const data = JSON.parse(payload); // 2. Define 'data' by parsing the payload
+  // ----------------------------
+
   const message = data.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
   if (!message) return NextResponse.json({ status: 'no_message' });
 
-  // 2. Extract Data (Text or Voice)
+  // 3. Extract Data (Text or Voice)
   const userMessage = message.text?.body || "[Voice Message]";
   const bsuid = message.from; // WhatsApp Number
 
-  // 3. Trigger Miyu Agent Core (Async)
-  // In MVP, we fire and forget or use a queue to respond quickly to Meta
   console.log(`Miyu received from ${bsuid}: ${userMessage}`);
 
   return NextResponse.json({ status: 'received' });
 }
+
 
 // WhatsApp Verification (Required for setup)
 export async function GET(req: NextRequest) {
@@ -40,3 +43,4 @@ export async function GET(req: NextRequest) {
   }
   return new NextResponse('Forbidden', { status: 403 });
 }
+
