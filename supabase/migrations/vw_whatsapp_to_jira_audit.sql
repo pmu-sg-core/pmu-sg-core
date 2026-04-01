@@ -13,6 +13,6 @@ SELECT
     log.jira_issue_key,
     log.status AS delivery_status
 FROM public.communication_logs log
-LEFT JOIN public.waitlist l ON log.sender_id = l.email
+LEFT JOIN public.waitlist l ON log.sender_id = l.phone OR log.sender_id = l.email
 LEFT JOIN public.ai_audit_trail audit ON log.id = audit.comm_log_id
 ORDER BY log.created_at DESC;
