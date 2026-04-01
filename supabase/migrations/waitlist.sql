@@ -2,6 +2,9 @@
 create table if not exists public.waitlist (
   id          uuid primary key default gen_random_uuid(),
   email       text not null unique,
+  first_name  text,
+  last_name   text,
+  reason      text,
   source      text not null default 'landing_page',
   created_at  timestamptz not null default now()
 );

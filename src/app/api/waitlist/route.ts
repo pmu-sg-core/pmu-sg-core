@@ -3,11 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
-  const { email } = await req.json();
+  const { email, firstName, lastName, reason } = await req.json();
 
   if (!email) {
-    console.error('Email missing. Body:', await req.text());
-    return NextResponse.json({ error: 'Email is missing' }, { status: 400 });
+    return NextResponse.json({ error: 'Email is required' }, { status: 400 });
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -22,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const { error } = await supabase
     .from('waitlist')
-    .insert([{ email }]);
+    .insert([{ email, first_name: firstName, last_name: lastName, reason, source: 'landing_page' }]);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

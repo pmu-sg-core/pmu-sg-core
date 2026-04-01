@@ -101,7 +101,10 @@ function PricingCard({
 }
 
 export default function WaitlistPage() {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [reason, setReason] = useState('sme_ops');
   const [submitted, setSubmitted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -125,7 +128,7 @@ export default function WaitlistPage() {
       const res = await fetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, firstName, lastName, reason }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -431,36 +434,52 @@ export default function WaitlistPage() {
 
             <div className="bg-slate-900/80 border border-slate-800 p-7 rounded-2xl shadow-2xl backdrop-blur-sm">
               {!submitted ? (
-                <div className="flex flex-col gap-4">
-                  <label htmlFor="email" className="text-sm font-medium text-slate-300 text-left">
-                    Work email
-                  </label>
-                  <div className="flex gap-2">
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                  <div className="flex gap-3">
                     <input
-                      type="email"
-                      id="email"
+                      placeholder="First Name"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
                       required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && email && handleSubmit(e)}
-                      placeholder="you@yourcompany.com.sg"
-                      className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                      className="w-1/2 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                     />
-                    <button
-                      onClick={handleSubmit}
-                      disabled={loading}
-                      className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:shadow-[0_0_20px_rgba(16,185,129,0.35)]"
-                    >
-                      {loading ? 'Submitting...' : 'Request Access'}
-                    </button>
+                    <input
+                      placeholder="Last Name"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className="w-1/2 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                    />
                   </div>
-                  {error && (
-                    <p className="text-xs text-red-400 text-left">{error}</p>
-                  )}
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@yourcompany.com.sg"
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                  />
+                  <select
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                  >
+                    <option value="sme_ops">Automating SME Operations</option>
+                    <option value="startup_scale">Scaling Startup Workflows</option>
+                    <option value="ai_gov">Agentic AI Governance</option>
+                    <option value="research">General Research</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-semibold transition-all hover:shadow-[0_0_20px_rgba(16,185,129,0.35)]"
+                  >
+                    {loading ? 'Submitting...' : 'Request Access'}
+                  </button>
+                  {error && <p className="text-xs text-red-400 text-left">{error}</p>}
                   <p className="text-xs text-slate-500 text-left">
-                    We&apos;ll reach out within 48 hours with next steps. No spam, ever.
+                    We&apos;ll reach out within 48 hours. No spam, ever.
                   </p>
-                </div>
+                </form>
               ) : (
                 <div className="py-6 text-center">
                   <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-4">
