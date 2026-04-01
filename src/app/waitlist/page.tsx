@@ -114,10 +114,30 @@ export default function WaitlistPage() {
     return () => window.removeEventListener('scroll', handler);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
-    console.log('Submitting email:', email);
-    setSubmitted(true);
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error ?? 'Something went wrong. Please try again.');
+      } else {
+        setSubmitted(true);
+      }
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -422,17 +442,21 @@ export default function WaitlistPage() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && email && handleSubmit(e as unknown as React.FormEvent)}
+                      onKeyDown={(e) => e.key === 'Enter' && email && handleSubmit(e)}
                       placeholder="you@yourcompany.com.sg"
                       className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                     />
                     <button
                       onClick={handleSubmit}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:shadow-[0_0_20px_rgba(16,185,129,0.35)]"
+                      disabled={loading}
+                      className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:shadow-[0_0_20px_rgba(16,185,129,0.35)]"
                     >
-                      Request Access
+                      {loading ? 'Submitting...' : 'Request Access'}
                     </button>
                   </div>
+                  {error && (
+                    <p className="text-xs text-red-400 text-left">{error}</p>
+                  )}
                   <p className="text-xs text-slate-500 text-left">
                     We&apos;ll reach out within 48 hours with next steps. No spam, ever.
                   </p>
