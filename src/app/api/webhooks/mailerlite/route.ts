@@ -6,15 +6,16 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const events = body.events;
 
-  if (!events || events.length === 0) {
-    return NextResponse.json({ message: 'No events found' }, { status: 200 });
+  if (!events || !events[0]) {
+    console.error('No events found. Received body:', JSON.stringify(body));
+    return NextResponse.json({ status: 'ignored', reason: 'no_events' }, { status: 200 });
   }
 
-  const subscriber = events[0]?.data?.subscriber;
-  const email = subscriber?.email;
+  const email = events[0].data?.subscriber?.email;
 
   if (!email) {
-    return NextResponse.json({ message: 'No email found' }, { status: 200 });
+    console.error('Email not found in subscriber data');
+    return NextResponse.json({ status: 'ignored', reason: 'no_email' }, { status: 200 });
   }
 
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
       .insert([{ email, source: 'mailerlite' }]);
 
     if (error && error.code !== '23505') {
-      // 23505 = unique violation (already exists), safe to ignore
+      console.error('Supabase Error:', error.message);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
   }
