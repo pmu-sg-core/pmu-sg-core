@@ -198,14 +198,14 @@ export default function WaitlistPage() {
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">without the data entry.</span>
               </h1>
               <p className="text-lg text-slate-400 mb-4 leading-relaxed max-w-lg">
-                Pmu.sg turns your team&apos;s WhatsApp chats into structured Jira tickets and action items instantly. If you can text, you can manage.
+                Pmu.sg turns your team&apos;s messages into structured tickets across Jira, Monday.com, Asana, and Trello — instantly. If you can text, you can manage.
               </p>
               <p className="text-sm text-slate-500 mb-8 max-w-md">
                 Meet Miyu, your AI project coordinator. She listens, logs, and executes — eliminating 80% of manual project admin so you can focus on delivery, not documentation.
               </p>
               <div className="flex flex-wrap gap-2 mb-8">
                 <FeaturePill text="WhatsApp Native" />
-                <FeaturePill text="Jira/Asana Sync" />
+                <FeaturePill text="Jira · Monday · Asana · Trello" />
                 <FeaturePill text="SME Grant Eligible" />
               </div>
               <a href="#waitlist" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 hover:shadow-[0_0_24px_rgba(16,185,129,0.4)]">
@@ -259,21 +259,23 @@ export default function WaitlistPage() {
                     <div className="w-px h-4 bg-gradient-to-b from-emerald-500/60 to-transparent" />
                   </div>
 
-                  {/* Jira output */}
-                  <div className="bg-slate-900 border border-slate-700/60 rounded-xl p-4 w-full shadow-2xl relative">
-                    <div className="absolute -top-2 -right-2 bg-emerald-500 text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase shadow-lg">Created</div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-mono text-slate-400">JIRA-1042</span>
-                      <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">Task</span>
-                    </div>
-                    <div className="text-sm font-semibold text-white mb-2">Implement New Header UI</div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <span className="w-4 h-4 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-[8px] font-bold">S</span>
-                        Sarah
-                      </span>
-                      <span>&bull;</span>
-                      <span className="text-orange-400">Due: Thursday</span>
+                  {/* Output tools */}
+                  <div className="w-full space-y-2">
+                    <div className="text-[10px] font-mono text-slate-500 uppercase tracking-widest text-center mb-3">Synced to your tools</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { name: 'Jira', ref: 'JIRA-1042', task: 'Implement New Header UI', color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
+                        { name: 'Monday.com', ref: 'Item #892', task: 'Client UI Approval — Dev', color: 'text-pink-400', bg: 'bg-pink-500/10 border-pink-500/20' },
+                        { name: 'Asana', ref: 'Task #4471', task: 'Header redesign — Sarah', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20' },
+                        { name: 'Trello', ref: 'Card created', task: 'New Header · In Progress', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+                      ].map(({ name, ref, task, color, bg }) => (
+                        <div key={name} className={`rounded-xl p-3 border ${bg} relative`}>
+                          <div className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
+                          <div className={`text-[10px] font-mono font-bold ${color} mb-1`}>{name}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">{ref}</div>
+                          <div className="text-[11px] text-white mt-1 leading-tight">{task}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -289,7 +291,7 @@ export default function WaitlistPage() {
             <StatCard value={90} suffix="%" label="PM time wasted on data entry" start={statsInView} />
             <StatCard value={15} suffix="+" label="Hours saved per week" start={statsInView} />
             <StatCard value={4200} suffix="" label="S$ monthly cost of a junior coordinator" start={statsInView} />
-            <StatCard value={2} suffix="s" label="Time to sync any message to Jira" start={statsInView} />
+            <StatCard value={2} suffix="s" label="Seconds to sync any message to your PM tool" start={statsInView} />
           </div>
         </section>
 
@@ -300,7 +302,7 @@ export default function WaitlistPage() {
               <div className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-3">The Problem</div>
               <h2 className="text-3xl font-black text-white mb-5 leading-tight">Project management has become &quot;Data Entry Management.&quot;</h2>
               <p className="text-slate-400 leading-relaxed mb-6">
-                Your team lives in WhatsApp, but your business needs the structure of Jira or Asana. The &quot;Human Latency Tax&quot; happens when PMs spend hours manually translating chats into tickets, slowing down actual work.
+                Your team lives in chat apps, but your business needs the structure of Jira, Monday.com, or Asana. The &quot;Human Latency Tax&quot; happens when PMs spend hours manually translating messages into tickets, slowing down actual work.
               </p>
               <div className="space-y-4">
                 {[
@@ -328,7 +330,7 @@ export default function WaitlistPage() {
                 {[
                   'Zero training required: Just message the bot on WhatsApp',
                   'Automatically generates titles, descriptions, and assigns owners',
-                  'Creates Jira Epics, Tasks, and Bug reports in seconds',
+                  'Creates tasks in Jira, Monday.com, Asana, or Trello in seconds',
                   'You retain total control: Draft mode available for PM approval',
                   'Bank-grade security: Your data stays strictly in Singapore',
                 ].map((item) => (
@@ -382,8 +384,8 @@ export default function WaitlistPage() {
 
               <div className="flex-1 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 text-center z-10 w-full">
                 <div className="w-12 h-12 mx-auto bg-purple-500/10 border border-purple-500/20 rounded-full flex items-center justify-center text-xl mb-4">✅</div>
-                <h3 className="font-bold text-white mb-2">3. Jira Syncs</h3>
-                <p className="text-sm text-slate-400">The ticket is instantly created in your Jira or Asana board, fully formatted and assigned.</p>
+                <h3 className="font-bold text-white mb-2">3. Your Tools Sync</h3>
+                <p className="text-sm text-slate-400">The task is instantly created in Jira, Monday.com, Asana, or Trello — fully formatted and assigned.</p>
               </div>
             </div>
           </div>
@@ -406,7 +408,7 @@ export default function WaitlistPage() {
                 target="Freelancers & boutique agencies"
                 features={[
                   'WhatsApp native interface',
-                  'Core Jira & Asana integrations',
+                  'Jira, Monday.com, Asana & Trello integrations',
                   'Up to 100 task creations/mo',
                   'Community support',
                 ]}
