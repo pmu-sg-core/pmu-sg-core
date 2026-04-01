@@ -11,5 +11,5 @@ SELECT
     log.status AS delivery_status
 FROM public.whatsapp_logs log
 LEFT JOIN public.waitlist l ON log.sender_number = l.email  -- join on email until phone column is added
-LEFT JOIN public.whatsapp_logs_audit_trail audit ON log.id = audit.whatsapp_log_id
+LEFT JOIN public.ai_audit_trail audit ON log.id = audit.whatsapp_log_id
 ORDER BY log.created_at DESC;
