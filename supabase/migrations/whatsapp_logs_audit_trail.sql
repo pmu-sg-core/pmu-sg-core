@@ -1,10 +1,11 @@
--- Stores the 'thinking' process of the AI before it hits Jira
+-- Refactored AI Audit Trail for any platform (replaces whatsapp_logs FK with communication_logs)
 CREATE TABLE IF NOT EXISTS public.ai_audit_trail (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    whatsapp_log_id UUID REFERENCES public.whatsapp_logs(id),
+    comm_log_id UUID REFERENCES public.communication_logs(id), -- Points to the Unified table
     input_text TEXT,
-    ai_classification TEXT, -- e.g., 'BUG', 'FEATURE'
-    ai_summary TEXT,        -- The title it generated for Jira
-    confidence_score FLOAT, -- How sure the AI was
+    ai_classification TEXT,  -- 'BUG', 'FEATURE', 'ENQUIRY'
+    ai_summary_title TEXT,   -- The 5-word title for Jira
+    confidence_score FLOAT,
+    processing_time_ms INT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
