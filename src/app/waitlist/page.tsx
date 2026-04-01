@@ -286,7 +286,7 @@ export default function WaitlistPage() {
               <div className="space-y-4">
                 {[
                   { icon: '📱', title: 'The WhatsApp Black Hole', desc: 'Decisions happen in chat, but never make it to the project board.' },
-                  { icon: '💸', title: 'Expensive Admin', desc: 'You are paying S$4,200/mo for a junior coordinator just to copy-paste updates.' },
+                  { icon: '💸', title: 'Expensive Admin', desc: 'You are paying S$4,200/mo for a junior coordinator just to copy-paste updates — and when they are overloaded or locked out of classified projects, your PM is left without cover.' },
                   { icon: '🤖', title: "Chatbots Can't Execute", desc: "Standard AI can chat, but it can't securely log into your systems and build tickets." },
                 ].map((item) => (
                   <div key={item.title} className="flex items-start gap-4 p-4 rounded-xl bg-slate-900/50 border border-slate-800/60">
