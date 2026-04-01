@@ -4,10 +4,12 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json();
+  console.log("FULL BODY RECEIVED:", JSON.stringify(req.body, null, 2));
 
   if (!email) {
     return NextResponse.json({ error: 'Email is required' }, { status: 400 });
   }
+
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
