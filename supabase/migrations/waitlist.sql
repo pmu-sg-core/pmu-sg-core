@@ -4,6 +4,7 @@ create table if not exists public.waitlist (
   email       text not null unique,
   first_name  text,
   last_name   text,
+  company     text,
   reason      text,
   source      text not null default 'landing_page',
   created_at  timestamptz not null default now()

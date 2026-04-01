@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const { email, firstName, lastName, reason } = await request.json();
+    const { email, firstName, lastName, company, reason } = await request.json();
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
@@ -22,12 +22,12 @@ export async function POST(request: Request) {
 
     const { error } = await supabase
       .from('waitlist')
-      .insert([{ email, first_name: firstName, last_name: lastName, reason }]);
+      .insert([{ email, first_name: firstName, last_name: lastName, company, reason }]);
 
     if (error) throw error;
 
     return NextResponse.json({ success: true });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error(err);
     return NextResponse.json({ error: 'Failed to save' }, { status: 500 });
   }

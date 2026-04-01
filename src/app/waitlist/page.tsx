@@ -104,6 +104,7 @@ export default function WaitlistPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [company, setCompany] = useState('');
   const [reason, setReason] = useState('sme_ops');
   const [submitted, setSubmitted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -128,7 +129,7 @@ export default function WaitlistPage() {
       const res = await fetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, firstName, lastName, reason }),
+        body: JSON.stringify({ email, firstName, lastName, company, reason }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -450,6 +451,12 @@ export default function WaitlistPage() {
                       className="w-1/2 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                     />
                   </div>
+                  <input
+                    placeholder="Company Name"
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                  />
                   <input
                     type="email"
                     required
