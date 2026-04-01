@@ -328,7 +328,7 @@ export default function WaitlistPage() {
               </p>
               <div className="space-y-3">
                 {[
-                  'Zero training required: Just message the bot on WhatsApp',
+                  'Zero training required: Just message Miyu',
                   'Automatically generates titles, descriptions, and assigns owners',
                   'Creates tasks in Jira, Monday.com, Asana, or Trello in seconds',
                   'You retain total control: Draft mode available for PM approval',
