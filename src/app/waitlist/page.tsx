@@ -217,34 +217,52 @@ export default function WaitlistPage() {
             </div>
 
             {/* Hero visual */}
-            <div className="hidden lg:flex justify-center">
+            <div className="hidden lg:flex justify-center items-center">
               <div className="relative w-full max-w-sm">
-                <div className="absolute inset-0 rounded-2xl bg-emerald-500/10 blur-2xl scale-110" />
-                <div className="relative space-y-4">
-                  {/* WhatsApp Bubble */}
-                  <div className="bg-slate-800/80 border border-slate-700 rounded-2xl rounded-tl-none p-4 w-4/5 shadow-lg backdrop-blur-sm">
-                    <div className="flex items-center gap-2 text-xs text-slate-400 mb-2 font-mono">
-                      <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/>
-                      </svg>
-                      Voice Note &bull; 0:12
-                    </div>
-                    <p className="text-sm text-white">&quot;Hey team, the client approved the UI updates. Let&apos;s create a ticket for Sarah to implement the new header by Thursday.&quot;</p>
-                  </div>
+                <div className="absolute inset-0 bg-emerald-500/5 blur-3xl scale-110 rounded-full" />
+                <div className="relative flex flex-col items-center gap-3">
 
-                  {/* Processing line */}
-                  <div className="flex justify-center my-2">
-                    <div className="h-8 border-l-2 border-dashed border-emerald-500/50 relative">
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-[#060b12] rounded-full flex items-center justify-center">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  {/* Input channels */}
+                  <div className="grid grid-cols-2 gap-3 w-full">
+                    {[
+                      { label: 'WhatsApp', msg: 'Voice note — 0:12', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20',
+                        icon: <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/> },
+                      { label: 'Slack', msg: '#proj-alpha · just now', color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20',
+                        icon: <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/> },
+                      { label: 'Telegram', msg: 'Team chat · 2 min ago', color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20',
+                        icon: <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/> },
+                      { label: 'Signal', msg: 'Encrypted · 5 min ago', color: 'text-sky-400', bg: 'bg-sky-500/10 border-sky-500/20',
+                        icon: <><circle cx="12" cy="12" r="4"/><path d="M12 2a10 10 0 1 0 10 10" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round"/><path d="M17 2l3 3-3 3" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round"/></> },
+                    ].map(({ label, msg, color, bg, icon }) => (
+                      <div key={label} className={`rounded-xl p-3 border ${bg} backdrop-blur-sm`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <svg className={`w-3.5 h-3.5 ${color} shrink-0`} viewBox="0 0 24 24" fill="currentColor">{icon}</svg>
+                          <span className={`text-[11px] font-mono font-bold ${color}`}>{label}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-mono">{msg}</p>
                       </div>
-                    </div>
+                    ))}
                   </div>
 
-                  {/* Jira Card */}
-                  <div className="bg-slate-900 border border-slate-700/60 rounded-xl p-4 w-[90%] ml-auto shadow-2xl relative">
+                  {/* Converging arrow to Miyu */}
+                  <div className="flex flex-col items-center gap-1 py-1">
+                    <div className="flex gap-6">
+                      <div className="w-px h-4 bg-gradient-to-b from-transparent to-emerald-500/60" />
+                      <div className="w-px h-4 bg-gradient-to-b from-transparent to-emerald-500/60" />
+                      <div className="w-px h-4 bg-gradient-to-b from-transparent to-emerald-500/60" />
+                      <div className="w-px h-4 bg-gradient-to-b from-transparent to-emerald-500/60" />
+                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-sm font-mono shadow-[0_0_16px_rgba(16,185,129,0.25)]">
+                      M
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-400">Miyu · Reasoning</span>
+                    <div className="w-px h-4 bg-gradient-to-b from-emerald-500/60 to-transparent" />
+                  </div>
+
+                  {/* Jira output */}
+                  <div className="bg-slate-900 border border-slate-700/60 rounded-xl p-4 w-full shadow-2xl relative">
                     <div className="absolute -top-2 -right-2 bg-emerald-500 text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase shadow-lg">Created</div>
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-mono text-slate-400">JIRA-1042</span>
                       <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">Task</span>
                     </div>
@@ -258,6 +276,7 @@ export default function WaitlistPage() {
                       <span className="text-orange-400">Due: Thursday</span>
                     </div>
                   </div>
+
                 </div>
               </div>
             </div>
@@ -270,7 +289,7 @@ export default function WaitlistPage() {
             <StatCard value={90} suffix="%" label="PM time wasted on data entry" start={statsInView} />
             <StatCard value={15} suffix="+" label="Hours saved per week" start={statsInView} />
             <StatCard value={4200} suffix="" label="S$ monthly cost of a junior coordinator" start={statsInView} />
-            <StatCard value={2} suffix="s" label="Time to sync WhatsApp to Jira" start={statsInView} />
+            <StatCard value={2} suffix="s" label="Time to sync any message to Jira" start={statsInView} />
           </div>
         </section>
 
