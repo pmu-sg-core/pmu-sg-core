@@ -376,7 +376,7 @@ export default function WaitlistPage() {
             <div className="text-center mb-14">
               <div className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-3">Pricing</div>
               <h2 className="text-3xl font-black text-white">Scale your PM capacity.</h2>
-              <p className="text-slate-400 mt-3 max-w-xl mx-auto">Skip the S$4,200/mo junior hire. Automate your admin for a fraction of the cost.</p>
+              <p className="text-slate-400 mt-3 max-w-xl mx-auto">Free your team from repetitive admin. Let Miyu handle the coordination so your people can focus on higher-value work.</p>
             </div>
 
             <div className="grid md:grid-cols-3 gap-6">
