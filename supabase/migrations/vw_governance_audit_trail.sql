@@ -1,5 +1,6 @@
 -- Unified Governance Audit Trail View
-CREATE OR REPLACE VIEW public.vw_governance_audit_trail AS
+DROP VIEW IF EXISTS public.vw_governance_audit_trail;
+CREATE VIEW public.vw_governance_audit_trail AS
 SELECT
     c.created_at AS interaction_time,
     w.company AS client_org,
