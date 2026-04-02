@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS public.communication_logs (
     platform_message_id TEXT UNIQUE, -- Platform-specific message ID
     sender_id TEXT NOT NULL,         -- Phone number, Slack user ID, etc.
     message_body TEXT,
-    jira_issue_key TEXT,
+    pm_issue_key TEXT,               -- The resulting task ID (e.g. PMU-101, MON-42)
     status TEXT DEFAULT 'received',  -- 'received', 'processed', 'error'
     error_log TEXT,
     raw_payload JSONB,

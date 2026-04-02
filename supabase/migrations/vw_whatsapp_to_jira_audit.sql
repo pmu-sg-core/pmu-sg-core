@@ -10,7 +10,7 @@ SELECT
     audit.ai_classification AS category,
     audit.confidence_score,
     audit.processing_time_ms,
-    log.jira_issue_key,
+    log.pm_issue_key,
     log.status AS delivery_status
 FROM public.communication_logs log
 LEFT JOIN public.waitlist l ON log.sender_id = l.phone OR log.sender_id = l.email

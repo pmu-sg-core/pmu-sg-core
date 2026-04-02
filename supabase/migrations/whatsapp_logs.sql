@@ -4,9 +4,9 @@ CREATE TABLE IF NOT EXISTS public.whatsapp_logs (
     wa_id TEXT UNIQUE,               -- The unique message ID from Meta
     sender_number TEXT NOT NULL,      -- The customer's phone number
     message_body TEXT,                -- The actual text they sent
-    jira_issue_key TEXT,              -- The resulting Jira ID (e.g., WS-101)
+    pm_issue_key TEXT,               -- The resulting task ID (e.g. PMU-101)
     status TEXT DEFAULT 'received',   -- 'received', 'processed', 'error'
-    error_log TEXT,                   -- Stores any Jira API errors for debugging
+    error_log TEXT,                   -- Stores any processing errors for debugging
     raw_payload JSONB,                -- The full JSON from Meta (crucial for MVP)
     created_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -7,7 +7,7 @@ SELECT
     c.message_body AS raw_input,
     audit.ai_summary_title AS ai_interpreted_title,
     audit.ai_classification AS category,
-    c.jira_issue_key,
+    c.pm_issue_key,
     c.status AS processing_status,
     (SELECT count(*) FROM public.communication_attachments a WHERE a.comm_log_id = c.id) AS attachment_count
 FROM public.communication_logs c

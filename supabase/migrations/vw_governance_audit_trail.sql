@@ -7,9 +7,9 @@ SELECT
     s.plan_type AS subscription_tier,
     c.platform AS intake_channel,
     c.message_body AS raw_input_text,
-    audit.ai_summary_title AS processed_jira_title,
+    audit.ai_summary_title AS processed_task_title,
     audit.ai_classification AS intent_category,
-    c.jira_issue_key AS external_reference_id,
+    c.pm_issue_key AS external_reference_id,
     CASE
         WHEN s.plan_type = 'pilot' THEN (10 - s.pilot_tasks_used)
         ELSE NULL
