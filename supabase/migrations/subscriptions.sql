@@ -1,4 +1,4 @@
--- The Core Subscription Engine
+-- The Core Subscription Engine (vendor-agnostic billing)
 CREATE TABLE IF NOT EXISTS public.subscriptions (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     waitlist_id UUID REFERENCES public.waitlist(id) ON DELETE CASCADE,
@@ -12,16 +12,15 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
     pilot_tasks_used INT DEFAULT 0,         -- Hard cap of 10 for Pilot
     projects_active INT DEFAULT 1,          -- S$49 per project logic
 
-    -- Stripe / Billing Integration
-    stripe_customer_id TEXT UNIQUE,
-    stripe_subscription_id TEXT UNIQUE,
+    -- Vendor-Agnostic Billing Integration
+    billing_provider TEXT,                  -- 'stripe', 'paypal', 'hitpay', 'manual'
+    external_customer_id TEXT UNIQUE,       -- The ID in their system
+    external_subscription_id TEXT UNIQUE,   -- The Subscription reference
     current_period_end TIMESTAMPTZ,
 
     created_at TIMESTAMPTZ DEFAULT NOW(),
 
-    -- Constraint: Prevent illegal plan types
     CONSTRAINT check_plan_type CHECK (plan_type IN ('pilot', 'lite', 'pro', 'corporate'))
 );
 
--- Index for the "Gatekeeper" lookup
 CREATE INDEX IF NOT EXISTS idx_sub_waitlist_id ON public.subscriptions(waitlist_id);
