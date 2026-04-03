@@ -28,3 +28,6 @@ Thumbs.db
 
 # Infographics
 docs/*.html
+
+# Teams manifest zip
+teams-manifest/*.zip
