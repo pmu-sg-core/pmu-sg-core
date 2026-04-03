@@ -25,3 +25,6 @@ Thumbs.db
 
 # Claude Code memory
 .claude/
+
+# Infographics
+docs/*.html

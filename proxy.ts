@@ -6,9 +6,7 @@ export function proxy(request: NextRequest) {
 
   if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login')) {
     const session = request.cookies.get('admin_session');
-    const isValid = session?.value === process.env.ADMIN_PASSWORD;
-
-    if (!isValid) {
+    if (!session?.value) {
       return NextResponse.redirect(new URL('/admin/login', request.url));
     }
   }
