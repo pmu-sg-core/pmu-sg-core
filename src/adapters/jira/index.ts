@@ -1,30 +1,72 @@
-// src/adapters/jira/index.ts
+import type { WorkItem, PMAdapter } from '../types';
 
-export async function createJiraTicket(summary: string, description: string) {
-  const domain = process.env.JIRA_DOMAIN;
-  const email = process.env.JIRA_EMAIL;
-  const apiToken = process.env.JIRA_API_TOKEN;
+export class JiraAdapter implements PMAdapter {
+  platform = 'jira';
 
-  const response = await fetch(`https://${domain}/rest/api/3/issue`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${Buffer.from(`${email}:${apiToken}`).toString('base64')}`,
+  private get headers() {
+    const email = process.env.JIRA_EMAIL!;
+    const token = process.env.JIRA_API_TOKEN!;
+    return {
+      'Authorization': `Basic ${Buffer.from(`${email}:${token}`).toString('base64')}`,
       'Accept': 'application/json',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      fields: {
-        project: { key: 'PMU' },
-        summary,
-        description: {
-          type: 'doc',
-          version: 1,
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }]
-        },
-        issuetype: { name: 'Task' }
-      }
-    })
-  });
+      'Content-Type': 'application/json',
+    };
+  }
 
-  return response.json();
-}// Read-only & Create-only Jira Adapters
+  private get baseUrl() {
+    return `https://${process.env.JIRA_DOMAIN}/rest/api/3`;
+  }
+
+  private toJiraPriority(priority: WorkItem['priority']): string {
+    const map: Record<WorkItem['priority'], string> = {
+      Low: 'Low',
+      Medium: 'Medium',
+      High: 'High',
+      Critical: 'Highest',
+    };
+    return map[priority];
+  }
+
+  async createWorkItem(item: WorkItem): Promise<WorkItem> {
+    const response = await fetch(`${this.baseUrl}/issue`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({
+        fields: {
+          project: { key: item.projectKey },
+          summary: item.title,
+          description: {
+            type: 'doc',
+            version: 1,
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: item.description }] }],
+          },
+          issuetype: { name: 'Task' },
+          priority: { name: this.toJiraPriority(item.priority) },
+        },
+      }),
+    });
+
+    const data = await response.json();
+    return { ...item, externalKey: data.key };
+  }
+
+  async getWorkItem(externalKey: string): Promise<WorkItem | null> {
+    const response = await fetch(`${this.baseUrl}/issue/${externalKey}`, {
+      headers: this.headers,
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+
+    return {
+      externalKey: data.key,
+      platform: 'jira',
+      title: data.fields.summary,
+      description: data.fields.description?.content?.[0]?.content?.[0]?.text ?? '',
+      priority: data.fields.priority?.name ?? 'Medium',
+      status: data.fields.status?.name,
+      projectKey: data.fields.project?.key,
+      createdAt: data.fields.created,
+    };
+  }
+}
