@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Twilio } from 'twilio';
 import { getAgentGovernance, callLLM } from '@/lib/agent-config';
+import { isBlacklisted, logIntake, logCommunication, logAuditTrail } from '@/lib/messaging-ops';
 
 const twilioClient = new Twilio(
   process.env.TWILIO_ACCOUNT_SID!,
@@ -18,36 +19,63 @@ function truncateAtSentence(body: string, limit: number): string {
   return lastEnd > 0 ? truncated.slice(0, lastEnd + 1) : truncated;
 }
 
+async function sendWhatsApp(to: string, body: string) {
+  await twilioClient.messages.create({
+    from: process.env.TWILIO_WHATSAPP_NUMBER,
+    to,
+    body,
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const incomingMsg = (formData.get('Body') as string) || '';
     const sender = formData.get('From') as string; // e.g., whatsapp:+65...
+    const messageSid = (formData.get('MessageSid') as string) || '';
 
     const senderPhone = sender.replace('whatsapp:', '');
-    const config = await getAgentGovernance(senderPhone);
 
-    // 1. Enforce input limit
-    const limit = config?.max_input_chars ?? 500;
-    if (incomingMsg.length > limit) {
-      await twilioClient.messages.create({
-        from: process.env.TWILIO_WHATSAPP_NUMBER,
-        to: sender,
-        body: `Message too long. Your current tier limit is ${limit} characters.`,
-      });
+    // Stage 0: Log intake
+    const rawPayload: Record<string, unknown> = {};
+    formData.forEach((value, key) => { rawPayload[key] = value; });
+    const intakeLogId = await logIntake({
+      platformMessageId: messageSid,
+      senderId: senderPhone,
+      messageBody: incomingMsg,
+      rawPayload,
+    });
+
+    // Stage 1: Blacklist check
+    const blocked = await isBlacklisted(senderPhone);
+    if (blocked) {
       return new NextResponse(
         '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
         { headers: { 'Content-Type': 'text/xml' } }
       );
     }
 
-    // 2. Get AI response — append runtime limits from DB to system prompt
+    // Stage 2: Identity & Policy Retrieval
+    const config = await getAgentGovernance(senderPhone);
+
+    // Stage 3: Hard Governance — input limit
+    const limit = config?.max_input_chars ?? 500;
+    if (incomingMsg.length > limit) {
+      await sendWhatsApp(sender, `Message too long. Your current tier limit is ${limit} characters.`);
+      return new NextResponse(
+        '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+        { headers: { 'Content-Type': 'text/xml' } }
+      );
+    }
+
+    // Stage 4: Soft Governance & Intuition
     const maxOutput = config?.max_output_tokens ?? 300;
     const systemPrompt = `${config?.system_prompt ?? 'You are Miyu, a helpful AI assistant.'}
 The user is on the ${config?.plan_type ?? 'pilot'} plan. They may send up to ${limit} characters per message. Your replies are capped at ${maxOutput} tokens.
 Always respond in plain text only — no markdown, no bullet points, no asterisks, no headers. This is WhatsApp.`;
 
-    const aiReply = await callLLM({
+    const llmStart = Date.now();
+    const { reply, classification, confidence } = await callLLM({
       provider: config?.model_provider ?? 'anthropic',
       model: config?.model_name ?? 'claude-sonnet-4-6',
       text: incomingMsg,
@@ -55,13 +83,29 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
       temperature: config?.temperature ?? 0.7,
       systemPrompt,
     });
+    const processingTimeMs = Date.now() - llmStart;
 
-    // 3. Send reply back to WhatsApp
-    await twilioClient.messages.create({
-      from: process.env.TWILIO_WHATSAPP_NUMBER,
-      to: sender,
-      body: truncateAtSentence(aiReply, 1500),
-    });
+    // Stage 5: Delivery
+    const finalReply = truncateAtSentence(reply, 1500);
+    await sendWhatsApp(sender, finalReply);
+
+    // Log communication + audit trail (non-blocking)
+    logCommunication({
+      platformMessageId: `${messageSid}_reply`,
+      senderId: senderPhone,
+      messageBody: finalReply,
+      rawPayload: { direction: 'outbound', model: config?.model_name },
+    }).then((commLogId: string | null) =>
+      logAuditTrail({
+        intakeLogId,
+        commLogId,
+        inputText: incomingMsg,
+        aiSummaryTitle: finalReply.slice(0, 100),
+        aiClassification: classification,
+        confidenceScore: confidence,
+        processingTimeMs,
+      })
+    ).catch(console.error);
 
     return new NextResponse(
       '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',

@@ -52,6 +52,12 @@ export async function getAgentGovernance(phoneNumber: string): Promise<AgentGove
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
+export interface LLMResult {
+  reply: string;
+  classification: string;
+  confidence: number;
+}
+
 export async function callLLM({
   provider,
   model,
@@ -66,20 +72,41 @@ export async function callLLM({
   maxTokens: number;
   temperature: number;
   systemPrompt: string;
-}): Promise<string> {
+}): Promise<LLMResult> {
+  const structuredSystem = `${systemPrompt}
+
+IMPORTANT: Always respond with a valid JSON object in this exact format:
+{
+  "reply": "<your plain text response to the user>",
+  "classification": "<one of: general_inquiry, task_request, status_update, complaint, out_of_scope>",
+  "confidence": <a number between 0.0 and 1.0 indicating how confident you are in your reply>
+}
+Do not include any text outside the JSON object.`;
+
   if (provider === 'anthropic') {
     const msg = await anthropic.messages.create({
       model,
       max_tokens: maxTokens,
       temperature,
-      system: systemPrompt,
+      system: structuredSystem,
       messages: [{ role: 'user', content: text }],
     });
-    return msg.content[0].type === 'text' ? msg.content[0].text : "I'm sorry, I couldn't process that.";
+
+    const raw = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        reply: parsed.reply ?? "I'm sorry, I couldn't process that.",
+        classification: parsed.classification ?? 'general_inquiry',
+        confidence: parsed.confidence ?? 0.5,
+      };
+    } catch {
+      return { reply: raw, classification: 'general_inquiry', confidence: 0.5 };
+    }
   }
 
   // Future providers: else if (provider === 'openai') { ... }
   // Future providers: else if (provider === 'gemini') { ... }
   // Future providers: else if (provider === 'ollama') { ... }
-  return "Unsupported AI provider.";
+  return { reply: 'Unsupported AI provider.', classification: 'out_of_scope', confidence: 1.0 };
 }
