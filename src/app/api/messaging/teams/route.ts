@@ -15,18 +15,30 @@ function truncateAtSentence(body: string, limit: number): string {
   return lastEnd > 0 ? truncated.slice(0, lastEnd + 1) : truncated;
 }
 
+async function getBotToken(): Promise<string> {
+  const res = await fetch('https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: process.env.TEAMS_APP_ID!,
+      client_secret: process.env.TEAMS_CLIENT_SECRET!,
+      scope: 'https://api.botframework.com/.default',
+    }),
+  });
+  const data = await res.json();
+  return data.access_token;
+}
+
 async function sendTeamsReply(serviceUrl: string, conversationId: string, activityId: string, text: string) {
-  const botToken = process.env.TEAMS_BOT_TOKEN!;
+  const token = await getBotToken();
   await fetch(`${serviceUrl}/v3/conversations/${conversationId}/activities/${activityId}`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${botToken}`,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      type: 'message',
-      text,
-    }),
+    body: JSON.stringify({ type: 'message', text }),
   });
 }
 
