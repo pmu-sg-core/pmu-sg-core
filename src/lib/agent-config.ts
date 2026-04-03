@@ -100,15 +100,16 @@ Do not include any text outside the JSON object.`;
     });
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
+    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
     try {
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(cleaned);
       return {
         reply: parsed.reply ?? "I'm sorry, I couldn't process that.",
         classification: parsed.classification ?? 'general_inquiry',
         confidence: parsed.confidence ?? 0.5,
       };
     } catch {
-      return { reply: raw, classification: 'general_inquiry', confidence: 0.5 };
+      return { reply: cleaned, classification: 'general_inquiry', confidence: 0.5 };
     }
   }
 
