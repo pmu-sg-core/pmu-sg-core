@@ -24,3 +24,7 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sub_waitlist_id ON public.subscriptions(waitlist_id);
+
+ALTER TABLE public.subscriptions
+ADD CONSTRAINT fk_sub_plan_type
+FOREIGN KEY (plan_type) REFERENCES public.plan_tiers(plan_type);
