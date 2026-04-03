@@ -1,0 +1,35 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "e51cd547-a6fc-464f-aa6c-b2ff09441aaf",
+  "developer": {
+    "name": "Cloudlab Technologies",
+    "websiteUrl": "https://pmu.sg",
+    "privacyUrl": "https://pmu.sg/privacy",
+    "termsOfUseUrl": "https://pmu.sg/terms"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "Miyu",
+    "full": "Miyu – pmu.sg AI Assistant"
+  },
+  "description": {
+    "short": "AI project management assistant by pmu.sg",
+    "full": "Miyu is your AI-powered project management assistant. Ask questions, create tasks, and get status updates — all inside Microsoft Teams."
+  },
+  "accentColor": "#00d4a1",
+  "bots": [
+    {
+      "botId": "e51cd547-a6fc-464f-aa6c-b2ff09441aaf",
+      "scopes": ["personal", "team", "groupchat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["pmu.sg"]
+}
