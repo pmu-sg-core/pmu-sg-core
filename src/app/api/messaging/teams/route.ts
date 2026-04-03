@@ -16,7 +16,8 @@ function truncateAtSentence(body: string, limit: number): string {
 }
 
 async function getBotToken(): Promise<string> {
-  const res = await fetch('https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token', {
+  const tenantId = process.env.TEAMS_TENANT_ID ?? 'botframework.com';
+  const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
