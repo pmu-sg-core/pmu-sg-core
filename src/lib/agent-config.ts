@@ -19,7 +19,12 @@ export interface AgentGovernance {
   enable_history: boolean;
 }
 
-export async function getAgentGovernance(phoneNumber: string): Promise<AgentGovernance | null> {
+export async function getAgentGovernance(
+  identity: string,
+  channel: 'whatsapp' | 'teams' = 'whatsapp'
+): Promise<AgentGovernance | null> {
+  const column = channel === 'teams' ? 'teams_user_id' : 'whatsapp_number';
+
   const { data, error } = await supabase
     .from('subscriptions')
     .select(`
@@ -38,7 +43,7 @@ export async function getAgentGovernance(phoneNumber: string): Promise<AgentGove
         )
       )
     `)
-    .eq('whatsapp_number', phoneNumber)
+    .eq(column, identity)
     .single();
 
   if (error || !data) return null;
