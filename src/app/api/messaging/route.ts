@@ -3,6 +3,7 @@ import { Twilio } from 'twilio';
 import { getAgentGovernance, callLLM } from '@/lib/agent-config';
 import { isBlacklisted, logIntake, logCommunication, logAuditTrail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
+import { routeWorkItem } from '@/adapters/router';
 
 const twilioClient = new Twilio(
   process.env.TWILIO_ACCOUNT_SID!,
@@ -86,7 +87,22 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
     });
     const processingTimeMs = Date.now() - llmStart;
 
-    // Stage 5: Delivery
+    // Stage 5: Route to PM tool if classified as task_request (non-blocking)
+    let pmIssueKey: string | undefined;
+    if (classification === 'task_request') {
+      routeWorkItem({
+        title: reply.slice(0, 100),
+        description: incomingMsg,
+        priority: 'Medium',
+        category: classification,
+        sourceMessageId: messageSid,
+        actorPhone: senderPhone,
+      }).then((workItem) => {
+        pmIssueKey = workItem?.externalKey;
+      }).catch(console.error);
+    }
+
+    // Stage 6: Delivery
     const finalReply = truncateAtSentence(reply, 1500);
     await sendWhatsApp(sender, finalReply);
 
@@ -117,8 +133,11 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
         confidence,
         processing_time_ms: processingTimeMs,
         plan_type: config?.plan_type ?? 'pilot',
+        pm_issue_key: pmIssueKey ?? null,
       },
-      actionTaken: `WhatsApp reply sent to ${senderPhone}`,
+      actionTaken: pmIssueKey
+        ? `WhatsApp reply sent to ${senderPhone} — WorkItem ${pmIssueKey} created`
+        : `WhatsApp reply sent to ${senderPhone}`,
       modelVersion: config?.model_name ?? 'claude-sonnet-4-6',
       promptId: config?.prompt_id ?? 'v1.0',
     }).catch(console.error);
