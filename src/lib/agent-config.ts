@@ -13,6 +13,7 @@ export interface AgentGovernance {
   // Personality
   temperature: number;
   system_prompt: string;
+  prompt_id: string;
   // Capabilities
   can_access_kb: boolean;
   enable_history: boolean;
@@ -31,6 +32,7 @@ export async function getAgentGovernance(phoneNumber: string): Promise<AgentGove
           model_name,
           temperature,
           system_prompt,
+          prompt_id,
           can_access_kb,
           enable_history
         )

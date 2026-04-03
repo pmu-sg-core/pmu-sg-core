@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Twilio } from 'twilio';
 import { getAgentGovernance, callLLM } from '@/lib/agent-config';
 import { isBlacklisted, logIntake, logCommunication, logAuditTrail } from '@/lib/messaging-ops';
+import { writeAuditVault } from '@/lib/security/hash-chain';
 
 const twilioClient = new Twilio(
   process.env.TWILIO_ACCOUNT_SID!,
@@ -89,7 +90,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
     const finalReply = truncateAtSentence(reply, 1500);
     await sendWhatsApp(sender, finalReply);
 
-    // Log communication + audit trail (non-blocking)
+    // Log communication + audit trail + vault (non-blocking)
     logCommunication({
       platformMessageId: `${messageSid}_reply`,
       senderId: senderPhone,
@@ -106,6 +107,21 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
         processingTimeMs,
       })
     ).catch(console.error);
+
+    writeAuditVault({
+      actorBsuid: senderPhone,
+      reasoningTrace: {
+        input: incomingMsg,
+        output: finalReply,
+        classification,
+        confidence,
+        processing_time_ms: processingTimeMs,
+        plan_type: config?.plan_type ?? 'pilot',
+      },
+      actionTaken: `WhatsApp reply sent to ${senderPhone}`,
+      modelVersion: config?.model_name ?? 'claude-sonnet-4-6',
+      promptId: config?.prompt_id ?? 'v1.0',
+    }).catch(console.error);
 
     return new NextResponse(
       '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
