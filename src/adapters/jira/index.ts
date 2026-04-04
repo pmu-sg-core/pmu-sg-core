@@ -27,7 +27,46 @@ export class JiraAdapter implements PMAdapter {
     return map[priority];
   }
 
+  // Look up a Jira user by email, return their accountId or null
+  async findUserByEmail(email: string): Promise<string | null> {
+    const res = await fetch(
+      `${this.baseUrl}/user/search?query=${encodeURIComponent(email)}`,
+      { headers: this.headers }
+    );
+    if (!res.ok) return null;
+    const users: Array<{ accountId: string; emailAddress?: string }> = await res.json();
+    const match = users.find(u => u.emailAddress?.toLowerCase() === email.toLowerCase());
+    return match?.accountId ?? null;
+  }
+
+  // Check if a user (by accountId) is assignable in the given project,
+  // which is the best proxy for having ASSIGN_ISSUES permission via the public API.
+  async canAssignInProject(accountId: string, projectKey: string): Promise<boolean> {
+    const res = await fetch(
+      `${this.baseUrl}/user/assignable/search?project=${encodeURIComponent(projectKey)}&accountId=${encodeURIComponent(accountId)}`,
+      { headers: this.headers }
+    );
+    if (!res.ok) return false;
+    const users: Array<{ accountId: string }> = await res.json();
+    return users.some(u => u.accountId === accountId);
+  }
+
+  // Convenience: resolve email → accountId → project permission check
+  async checkAssignPermission(email: string, projectKey: string): Promise<boolean> {
+    try {
+      const accountId = await this.findUserByEmail(email);
+      if (!accountId) return false;
+      return this.canAssignInProject(accountId, projectKey);
+    } catch {
+      return false;
+    }
+  }
+
   async createWorkItem(item: WorkItem): Promise<WorkItem> {
+    const assigneeAccountId = item.assigneeEmail
+      ? await this.findUserByEmail(item.assigneeEmail).catch(() => null)
+      : null;
+
     const response = await fetch(`${this.baseUrl}/issue`, {
       method: 'POST',
       headers: this.headers,
@@ -42,6 +81,7 @@ export class JiraAdapter implements PMAdapter {
           },
           issuetype: { name: 'Task' },
           priority: { name: this.toJiraPriority(item.priority) },
+          ...(assigneeAccountId ? { assignee: { accountId: assigneeAccountId } } : {}),
         },
       }),
     });

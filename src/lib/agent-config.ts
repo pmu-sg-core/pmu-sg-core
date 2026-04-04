@@ -17,6 +17,7 @@ export interface AgentGovernance {
   // Capabilities
   can_access_kb: boolean;
   enable_history: boolean;
+  can_assign_tickets: boolean;
 }
 
 export async function getAgentGovernance(
@@ -63,6 +64,7 @@ export interface TaskFields {
   title: string;
   description: string;
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  assigneeEmail?: string; // only set when requestor has assign permission
 }
 
 export interface LLMResult {
@@ -80,6 +82,7 @@ export async function callLLM({
   temperature,
   systemPrompt,
   conversationHistory = [],
+  canAssignTickets = false,
 }: {
   provider: string;
   model: string;
@@ -88,7 +91,16 @@ export async function callLLM({
   temperature: number;
   systemPrompt: string;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  canAssignTickets?: boolean;
 }): Promise<LLMResult> {
+  const taskSchema = canAssignTickets
+    ? `{ "title": "...", "description": "...", "priority": "Low|Medium|High|Critical", "assigneeEmail": "email@example.com or null" }`
+    : `{ "title": "...", "description": "...", "priority": "Low|Medium|High|Critical" }`;
+
+  const assigneeRule = canAssignTickets
+    ? `- The requestor has permission to assign tickets. After collecting title, description, and priority, ask: "Who should this be assigned to? Please provide their email address, or say 'unassigned'." Include their answer as "assigneeEmail" in the task field (null if unassigned).`
+    : `- The requestor does not have permission to assign tickets. Do not ask about assignees. The ticket will be created unassigned for the team to triage.`;
+
   const structuredSystem = `${systemPrompt}
 
 IMPORTANT: Always respond with a valid JSON object in this exact format:
@@ -96,16 +108,17 @@ IMPORTANT: Always respond with a valid JSON object in this exact format:
   "reply": "<your plain text response to the user>",
   "classification": "<one of: general_inquiry, pm.task_request, pm.task_incomplete, status_update, complaint, out_of_scope>",
   "confidence": <a number between 0.0 and 1.0 indicating how confident you are in your reply>,
-  "task": { "title": "...", "description": "...", "priority": "Low|Medium|High|Critical" }
+  "task": ${taskSchema}
 }
 The "task" field is REQUIRED when classification is "pm.task_request". Omit it for all other classifications.
 Do not include any text outside the JSON object.
 
 Classification rules for task routing:
-- Use "pm.task_request" ONLY when you have collected ALL of: (1) a clear task title, (2) a meaningful description with enough context to act on, and (3) a priority level. Populate the "task" field with the collected values.
-- Use "pm.task_incomplete" when the user signals task intent but any of title, description, or priority is missing or unclear. Your reply must ask ONLY for the next missing field — do not ask for everything at once. Guide the user one question at a time until all three are collected from the conversation history.
+- Use "pm.task_request" ONLY when you have collected ALL required fields (see assignee rule below). Populate the "task" field with the collected values.
+- Use "pm.task_incomplete" when the user signals task intent but any required field is still missing. Your reply must ask ONLY for the next missing field — one question at a time.
 - Never classify as "pm.task_request" if any required task field is still unknown.
-- Never create a ticket for vague, ambiguous, or incomplete task requests.`;
+- Never create a ticket for vague, ambiguous, or incomplete task requests.
+${assigneeRule}`;
 
   if (provider === 'anthropic') {
     const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [

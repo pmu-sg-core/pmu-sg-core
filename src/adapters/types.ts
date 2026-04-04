@@ -16,6 +16,9 @@ export interface WorkItem {
   projectKey: string;          // PM project key (from pm_project_routing)
   category?: string;           // Category that drove the routing decision
 
+  // Assignment
+  assigneeEmail?: string;      // Jira email of the assignee (resolved to accountId by adapter)
+
   // Traceability
   sourceMessageId?: string;    // intake_logs.platform_message_id
   commLogId?: string;          // communication_logs.id

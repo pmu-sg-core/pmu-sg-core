@@ -54,6 +54,17 @@ export async function logCommunication(params: {
   return data?.id ?? null;
 }
 
+// Get subscriber email linked to a subscription (for Jira permission checks)
+export async function getSubscriberEmail(senderId: string, channel: 'whatsapp' | 'teams'): Promise<string | null> {
+  const column = channel === 'teams' ? 'teams_user_id' : 'whatsapp_number';
+  const { data } = await supabase
+    .from('subscriptions')
+    .select('subscriber:subscriber_id (email)')
+    .eq(column, senderId)
+    .single();
+  return (data?.subscriber as { email?: string } | null)?.email ?? null;
+}
+
 export interface ConversationTurn {
   role: 'user' | 'assistant';
   content: string;

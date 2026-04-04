@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
 import { Twilio } from 'twilio';
 import { getAgentGovernance, callLLM } from '@/lib/agent-config';
-import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState } from '@/lib/messaging-ops';
+import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
 import { routeWorkItem } from '@/adapters/router';
+import { JiraAdapter } from '@/adapters/jira';
 
 const twilioClient = new Twilio(
   process.env.TWILIO_ACCOUNT_SID!,
   process.env.TWILIO_AUTH_TOKEN!
 );
+const jira = new JiraAdapter();
 
 function truncateAtSentence(body: string, limit: number): string {
   if (body.length <= limit) return body;
@@ -70,14 +72,22 @@ export async function POST(req: Request) {
       );
     }
 
-    // Stage 4: Load conversation history for multi-turn task gathering
-    const { history, gatheringTask } = await getConversationState(senderPhone, 'whatsapp');
+    // Stage 4: Load conversation history + check Jira assign permission
+    const [{ history, gatheringTask }, subscriberEmail] = await Promise.all([
+      getConversationState(senderPhone, 'whatsapp'),
+      getSubscriberEmail(senderPhone, 'whatsapp'),
+    ]);
+
+    const projectKey = process.env.JIRA_PROJECT_KEY ?? 'KAN';
+    const canAssignTickets = subscriberEmail
+      ? await jira.checkAssignPermission(subscriberEmail, projectKey)
+      : false;
 
     const maxOutput = config?.max_output_tokens ?? 300;
     const systemPrompt = `${config?.system_prompt ?? 'You are Miyu, a helpful AI assistant.'}
 The user is on the ${config?.plan_type ?? 'pilot'} plan. They may send up to ${limit} characters per message. Your replies are capped at ${maxOutput} tokens.
 Always respond in plain text only — no markdown, no bullet points, no asterisks, no headers. This is WhatsApp.
-${gatheringTask ? 'You are currently collecting task details from the user. Continue asking for the next missing field (title, description, or priority) based on what has already been provided in the conversation.' : ''}`;
+${gatheringTask ? 'You are currently collecting task details from the user. Continue asking for the next missing field based on what has already been provided in the conversation.' : ''}`;
 
     const llmStart = Date.now();
     const { reply, classification, confidence, task } = await callLLM({
@@ -88,6 +98,7 @@ ${gatheringTask ? 'You are currently collecting task details from the user. Cont
       temperature: config?.temperature ?? 0.7,
       systemPrompt,
       conversationHistory: history,
+      canAssignTickets,
     });
     const processingTimeMs = Date.now() - llmStart;
 
@@ -99,6 +110,7 @@ ${gatheringTask ? 'You are currently collecting task details from the user. Cont
           title: task.title,
           description: task.description,
           priority: task.priority,
+          assigneeEmail: task.assigneeEmail ?? undefined,
           category: classification,
           sourceMessageId: messageSid,
           actorPhone: senderPhone,
@@ -109,11 +121,15 @@ ${gatheringTask ? 'You are currently collecting task details from the user. Cont
       }
     }
 
-    // Stage 6: Delivery
-    const finalReply = truncateAtSentence(reply, 1500);
+    // Stage 6: Delivery — append ticket confirmation if created
+    const baseReply = truncateAtSentence(reply, 1500);
+    const finalReply = pmIssueKey
+      ? `${baseReply}\n\nTicket ${pmIssueKey} has been raised. The team will pick it up shortly.`
+      : baseReply;
+
     await sendWhatsApp(sender, finalReply);
 
-    // Update conversation history
+    // Update conversation history (clear gathering state once ticket is created)
     const updatedHistory = [
       ...history,
       { role: 'user' as const, content: incomingMsg },

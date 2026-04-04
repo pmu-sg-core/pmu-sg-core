@@ -17,8 +17,9 @@ CREATE TABLE public.config_settings (
     system_prompt   TEXT NOT NULL DEFAULT 'You are Miyu, a helpful AI assistant. Always respond in clear, proper English with complete sentences. Be concise. Never leave a response mid-sentence or incomplete. Do not use bullet points or markdown formatting.',
 
     -- Capabilities
-    can_access_kb   BOOLEAN NOT NULL DEFAULT false,
-    enable_history  BOOLEAN NOT NULL DEFAULT false,
+    can_access_kb       BOOLEAN NOT NULL DEFAULT false,
+    enable_history      BOOLEAN NOT NULL DEFAULT false,
+    can_assign_tickets  BOOLEAN NOT NULL DEFAULT false,
 
     -- Prompt Versioning
     prompt_id       TEXT NOT NULL DEFAULT 'v1.0',
