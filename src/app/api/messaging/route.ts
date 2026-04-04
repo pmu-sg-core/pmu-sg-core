@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
-import { Twilio } from 'twilio';
 import { getAgentGovernance, callLLM, callLLMGathering, getNextField } from '@/lib/agent-config';
 import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
 import { routeWorkItem, checkCanAssign } from '@/adapters/router';
+import { WhatsAppAdapter } from '@/adapters/messenger/whatsapp';
 
-const twilioClient = new Twilio(
-  process.env.TWILIO_ACCOUNT_SID!,
-  process.env.TWILIO_AUTH_TOKEN!
-);
+const messenger = new WhatsAppAdapter();
 
 function truncateAtSentence(body: string, limit: number): string {
   if (body.length <= limit) return body;
@@ -19,14 +16,6 @@ function truncateAtSentence(body: string, limit: number): string {
     truncated.lastIndexOf('?')
   );
   return lastEnd > 0 ? truncated.slice(0, lastEnd + 1) : truncated;
-}
-
-async function sendWhatsApp(to: string, body: string) {
-  await twilioClient.messages.create({
-    from: process.env.TWILIO_WHATSAPP_NUMBER,
-    to,
-    body,
-  });
 }
 
 export async function POST(req: Request) {
@@ -63,7 +52,7 @@ export async function POST(req: Request) {
     // Stage 3: Hard Governance — input limit
     const limit = config?.max_input_chars ?? 500;
     if (incomingMsg.length > limit) {
-      await sendWhatsApp(sender, `Message too long. Your current tier limit is ${limit} characters.`);
+      await messenger.send(sender, `Message too long. Your current tier limit is ${limit} characters.`);
       return new NextResponse(
         '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
         { headers: { 'Content-Type': 'text/xml' } }
@@ -122,7 +111,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
           { role: 'assistant' as const, content: reply },
         ];
         rotateConversationState(senderPhone, 'whatsapp', currentTurn).catch(console.error);
-        await sendWhatsApp(sender, truncateAtSentence(reply, 1500));
+        await messenger.send(sender, truncateAtSentence(reply, 1500));
         logPost({ intakeLogId, senderPhone, messageSid, incomingMsg, reply, classification, confidence, config, processingTimeMs: Date.now() - llmStart });
         return xmlOk();
       }
@@ -203,7 +192,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
       ? `${baseReply}\n\nTicket ${pmIssueKey} has been raised. The team will pick it up shortly.`
       : baseReply;
 
-    await sendWhatsApp(sender, finalReply);
+    await messenger.send(sender, finalReply);
 
     // Stage 6: Persist state
     const updatedHistory = [

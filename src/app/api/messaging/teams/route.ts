@@ -3,6 +3,9 @@ import { getAgentGovernance, callLLM, callLLMGathering, getNextField } from '@/l
 import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
 import { routeWorkItem, checkCanAssign } from '@/adapters/router';
+import { TeamsAdapter } from '@/adapters/messenger/teams';
+
+const messenger = new TeamsAdapter();
 
 function truncateAtSentence(body: string, limit: number): string {
   if (body.length <= limit) return body;
@@ -13,34 +16,6 @@ function truncateAtSentence(body: string, limit: number): string {
     truncated.lastIndexOf('?')
   );
   return lastEnd > 0 ? truncated.slice(0, lastEnd + 1) : truncated;
-}
-
-async function getBotToken(): Promise<string> {
-  const tenantId = process.env.TEAMS_TENANT_ID ?? 'botframework.com';
-  const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: process.env.TEAMS_APP_ID!,
-      client_secret: process.env.TEAMS_CLIENT_SECRET!,
-      scope: 'https://api.botframework.com/.default',
-    }),
-  });
-  const data = await res.json();
-  return data.access_token;
-}
-
-async function sendTeamsReply(serviceUrl: string, conversationId: string, activityId: string, text: string) {
-  const token = await getBotToken();
-  await fetch(`${serviceUrl}/v3/conversations/${conversationId}/activities/${activityId}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ type: 'message', text }),
-  });
 }
 
 export async function POST(req: Request) {
@@ -77,8 +52,9 @@ export async function POST(req: Request) {
     // Stage 3: Hard Governance — input limit
     const limit = config?.max_input_chars ?? 500;
     if (incomingMsg.length > limit) {
-      await sendTeamsReply(serviceUrl, conversationId, activityId,
-        `Message too long. Your current tier limit is ${limit} characters.`);
+      await messenger.send(teamsUserId,
+        `Message too long. Your current tier limit is ${limit} characters.`,
+        { serviceUrl, conversationId, activityId });
       return new NextResponse('OK', { status: 200 });
     }
 
@@ -133,7 +109,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
           { role: 'assistant' as const, content: reply },
         ];
         rotateConversationState(teamsUserId, 'teams', currentTurn).catch(console.error);
-        await sendTeamsReply(serviceUrl, conversationId, activityId, truncateAtSentence(reply, 1500));
+        await messenger.send(teamsUserId, truncateAtSentence(reply, 1500), { serviceUrl, conversationId, activityId });
         logPost({ intakeLogId, senderId: teamsUserId, activityId, incomingMsg, reply, classification, confidence, config, processingTimeMs: Date.now() - llmStart });
         return new NextResponse('OK', { status: 200 });
       }
@@ -213,7 +189,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
       ? `${baseReply}\n\nTicket ${pmIssueKey} has been raised. The team will pick it up shortly.`
       : baseReply;
 
-    await sendTeamsReply(serviceUrl, conversationId, activityId, finalReply);
+    await messenger.send(teamsUserId, finalReply, { serviceUrl, conversationId, activityId });
 
     // Stage 6: Persist state
     const updatedHistory = [
