@@ -85,10 +85,15 @@ export async function callLLM({
 IMPORTANT: Always respond with a valid JSON object in this exact format:
 {
   "reply": "<your plain text response to the user>",
-  "classification": "<one of: general_inquiry, pm.task_request, status_update, complaint, out_of_scope>",
+  "classification": "<one of: general_inquiry, pm.task_request, pm.task_incomplete, status_update, complaint, out_of_scope>",
   "confidence": <a number between 0.0 and 1.0 indicating how confident you are in your reply>
 }
-Do not include any text outside the JSON object.`;
+Do not include any text outside the JSON object.
+
+Classification rules for task routing:
+- Use "pm.task_request" ONLY when the message clearly contains: (1) a specific task or action to be done, (2) enough context to act on it without further clarification, and (3) an implicit or explicit owner or requester.
+- Use "pm.task_incomplete" when the message signals a task intent but is missing critical detail — e.g. vague requests like "can you create a task", "help me with something", or "I need to raise a ticket". In this case, your reply must ask the user to provide: Task title (what needs to be done), Description (details and context), and Priority (Low, Medium, High, or Critical).
+- Never create a Jira ticket for ambiguous or incomplete task requests.`;
 
   if (provider === 'anthropic') {
     const msg = await anthropic.messages.create({
