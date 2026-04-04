@@ -54,6 +54,50 @@ export async function logCommunication(params: {
   return data?.id ?? null;
 }
 
+export interface ConversationTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+// Fetch conversation history and gathering state for a sender
+export async function getConversationState(senderId: string, channel: string): Promise<{
+  history: ConversationTurn[];
+  gatheringTask: boolean;
+}> {
+  const { data } = await supabase
+    .from('active_conversations')
+    .select('conversation_history, gathering_task')
+    .eq('sender_id', senderId)
+    .eq('channel', channel)
+    .single();
+  return {
+    history: (data?.conversation_history as ConversationTurn[]) ?? [],
+    gatheringTask: data?.gathering_task ?? false,
+  };
+}
+
+// Upsert conversation history and gathering state
+export async function updateConversationState(
+  senderId: string,
+  channel: string,
+  history: ConversationTurn[],
+  gatheringTask: boolean,
+  pmIssueKey?: string,
+): Promise<void> {
+  const MAX_HISTORY = 20; // keep last 20 turns
+  const trimmed = history.slice(-MAX_HISTORY);
+  await supabase
+    .from('active_conversations')
+    .upsert({
+      sender_id: senderId,
+      channel,
+      conversation_history: trimmed,
+      gathering_task: gatheringTask,
+      last_interaction_at: new Date().toISOString(),
+      ...(pmIssueKey ? { last_pm_issue_key: pmIssueKey } : {}),
+    }, { onConflict: 'sender_id,channel' });
+}
+
 // Log AI interaction to ai_audit_trail
 export async function logAuditTrail(params: {
   commLogId: string | null;

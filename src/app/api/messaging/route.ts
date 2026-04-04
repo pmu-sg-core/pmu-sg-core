@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Twilio } from 'twilio';
 import { getAgentGovernance, callLLM } from '@/lib/agent-config';
-import { isBlacklisted, logIntake, logCommunication, logAuditTrail } from '@/lib/messaging-ops';
+import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
 import { routeWorkItem } from '@/adapters/router';
 
@@ -70,31 +70,35 @@ export async function POST(req: Request) {
       );
     }
 
-    // Stage 4: Soft Governance & Intuition
+    // Stage 4: Load conversation history for multi-turn task gathering
+    const { history, gatheringTask } = await getConversationState(senderPhone, 'whatsapp');
+
     const maxOutput = config?.max_output_tokens ?? 300;
     const systemPrompt = `${config?.system_prompt ?? 'You are Miyu, a helpful AI assistant.'}
 The user is on the ${config?.plan_type ?? 'pilot'} plan. They may send up to ${limit} characters per message. Your replies are capped at ${maxOutput} tokens.
-Always respond in plain text only — no markdown, no bullet points, no asterisks, no headers. This is WhatsApp.`;
+Always respond in plain text only — no markdown, no bullet points, no asterisks, no headers. This is WhatsApp.
+${gatheringTask ? 'You are currently collecting task details from the user. Continue asking for the next missing field (title, description, or priority) based on what has already been provided in the conversation.' : ''}`;
 
     const llmStart = Date.now();
-    const { reply, classification, confidence } = await callLLM({
+    const { reply, classification, confidence, task } = await callLLM({
       provider: config?.model_provider ?? 'anthropic',
       model: config?.model_name ?? 'claude-sonnet-4-6',
       text: incomingMsg,
       maxTokens: maxOutput,
       temperature: config?.temperature ?? 0.7,
       systemPrompt,
+      conversationHistory: history,
     });
     const processingTimeMs = Date.now() - llmStart;
 
-    // Stage 5: Route to PM tool if classified as task_request
+    // Stage 5: Route to PM tool if all task fields collected
     let pmIssueKey: string | undefined;
-    if (classification === 'pm.task_request') {
+    if (classification === 'pm.task_request' && task) {
       try {
         const workItem = await routeWorkItem({
-          title: reply.slice(0, 100),
-          description: incomingMsg,
-          priority: 'Medium',
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
           category: classification,
           sourceMessageId: messageSid,
           actorPhone: senderPhone,
@@ -108,6 +112,15 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
     // Stage 6: Delivery
     const finalReply = truncateAtSentence(reply, 1500);
     await sendWhatsApp(sender, finalReply);
+
+    // Update conversation history
+    const updatedHistory = [
+      ...history,
+      { role: 'user' as const, content: incomingMsg },
+      { role: 'assistant' as const, content: reply },
+    ];
+    const stillGathering = classification === 'pm.task_incomplete';
+    updateConversationState(senderPhone, 'whatsapp', updatedHistory, stillGathering, pmIssueKey).catch(console.error);
 
     // Log communication + audit trail + vault (non-blocking)
     logCommunication({

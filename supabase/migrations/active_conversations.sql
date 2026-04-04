@@ -10,5 +10,7 @@ CREATE TABLE public.active_conversations (
     last_pm_issue_key   TEXT,
     last_interaction_at TIMESTAMPTZ DEFAULT NOW(),
     status_fk           INT REFERENCES public.system_status(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    conversation_history JSONB DEFAULT '[]', -- last N exchanges: [{role, content}]
+    gathering_task      BOOLEAN DEFAULT FALSE, -- true while Miyu is collecting task details
     UNIQUE (sender_id, channel)             -- one active conversation per sender per channel
 );
