@@ -115,7 +115,7 @@ Do not include any text outside the JSON object.
 
 Classification rules for task routing:
 - Use "pm.task_request" ONLY when you have collected ALL required fields (see assignee rule below). Populate the "task" field with the collected values.
-- Use "pm.task_incomplete" when the user signals task intent but any required field is still missing. Your reply must ask ONLY for the next missing field — one question at a time.
+- Use "pm.task_incomplete" when the user signals task intent but any required field is still missing. Ask ONLY for the next missing field — one question at a time, in this exact order: title → description → priority${canAssignTickets ? ' → assignee email' : ''}. Do NOT ask for due date, deadline, effort, or any other field.
 - Never classify as "pm.task_request" if any required task field is still unknown.
 - Never create a ticket for vague, ambiguous, or incomplete task requests.
 ${assigneeRule}`;
