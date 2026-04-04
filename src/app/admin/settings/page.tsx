@@ -49,8 +49,14 @@ export default async function AdminSettingsPage() {
               <span className="text-[#00d4a1] font-bold text-lg tracking-tight">pmu</span>
               <span className="text-white font-bold text-lg tracking-tight">.sg</span>
             </div>
-            <h1 className="text-2xl font-bold text-white">Governance Hub</h1>
-            <p className="text-zinc-500 text-sm">Configure AI boundaries and model logic across subscription tiers.</p>
+            <nav className="flex items-center gap-1 mt-2">
+              <a href="/admin/settings" className="text-sm text-white bg-zinc-800 border border-zinc-700 px-3 py-1.5 rounded-lg">
+                Governance
+              </a>
+              <a href="/dashboard" className="text-sm text-zinc-500 hover:text-white px-3 py-1.5 rounded-lg transition-colors">
+                Ontology
+              </a>
+            </nav>
           </div>
           <form action={logoutAdmin}>
             <button type="submit" className="text-sm text-zinc-400 hover:text-white border border-zinc-700 hover:border-zinc-500 rounded-lg px-4 py-2 transition-colors">
