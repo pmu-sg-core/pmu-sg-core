@@ -61,3 +61,14 @@ JOIN (VALUES
          temperature, system_prompt, can_access_kb, enable_history, prompt_id)
 ON pt.plan_type = cfg.plan_type
 ON CONFLICT (plan_tier_id) DO NOTHING;
+
+-- Incremental: safe to run on existing live table
+ALTER TABLE public.config_settings
+    ADD COLUMN IF NOT EXISTS can_assign_tickets BOOLEAN NOT NULL DEFAULT false;
+
+-- Grant assign rights to pro and corporate tiers
+UPDATE public.config_settings cs
+SET can_assign_tickets = true
+FROM public.plan_tiers pt
+WHERE cs.plan_tier_id = pt.id
+  AND pt.plan_type IN ('pro', 'corporate');

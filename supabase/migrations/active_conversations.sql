@@ -14,3 +14,8 @@ CREATE TABLE public.active_conversations (
     gathering_task      BOOLEAN DEFAULT FALSE, -- true while Miyu is collecting task details
     UNIQUE (sender_id, channel)             -- one active conversation per sender per channel
 );
+
+-- Incremental: safe to run on existing live table
+ALTER TABLE public.active_conversations
+    ADD COLUMN IF NOT EXISTS conversation_history JSONB DEFAULT '[]',
+    ADD COLUMN IF NOT EXISTS gathering_task BOOLEAN DEFAULT FALSE;
