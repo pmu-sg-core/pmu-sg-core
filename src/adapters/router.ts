@@ -10,6 +10,23 @@ const adapters: Record<string, PMAdapter> = {
   // trello: new TrelloAdapter(),
 };
 
+// Check if a user (by email) has assign permission in the PM tool for a given category
+export async function checkCanAssign(category: string, email: string): Promise<boolean> {
+  const { data: route } = await supabase
+    .from('pm_project_routing')
+    .select('pm_tool, pm_project_key')
+    .eq('category_name', category)
+    .eq('is_active', true)
+    .single();
+
+  if (!route) return false;
+
+  const adapter = adapters[route.pm_tool];
+  if (!adapter) return false;
+
+  return adapter.checkAssignPermission(email, route.pm_project_key);
+}
+
 // Look up routing config from pm_project_routing, then dispatch to the right adapter
 export async function routeWorkItem(item: Omit<WorkItem, 'platform' | 'projectKey' | 'createdAt'>): Promise<WorkItem | null> {
   const { data: route, error: routeError } = await supabase

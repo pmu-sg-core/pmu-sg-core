@@ -3,14 +3,12 @@ import { Twilio } from 'twilio';
 import { getAgentGovernance, callLLM } from '@/lib/agent-config';
 import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
-import { routeWorkItem } from '@/adapters/router';
-import { JiraAdapter } from '@/adapters/jira';
+import { routeWorkItem, checkCanAssign } from '@/adapters/router';
 
 const twilioClient = new Twilio(
   process.env.TWILIO_ACCOUNT_SID!,
   process.env.TWILIO_AUTH_TOKEN!
 );
-const jira = new JiraAdapter();
 
 function truncateAtSentence(body: string, limit: number): string {
   if (body.length <= limit) return body;
@@ -78,9 +76,8 @@ export async function POST(req: Request) {
       getSubscriberEmail(senderPhone, 'whatsapp'),
     ]);
 
-    const projectKey = process.env.JIRA_PROJECT_KEY ?? 'KAN';
     const canAssignTickets = subscriberEmail
-      ? await jira.checkAssignPermission(subscriberEmail, projectKey)
+      ? await checkCanAssign('pm.task_request', subscriberEmail)
       : false;
 
     const maxOutput = config?.max_output_tokens ?? 300;

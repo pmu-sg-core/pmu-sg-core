@@ -31,4 +31,5 @@ export interface PMAdapter {
   platform: string;
   createWorkItem(item: WorkItem): Promise<WorkItem>; // Returns item with externalKey set
   getWorkItem(externalKey: string): Promise<WorkItem | null>;
+  checkAssignPermission(email: string, projectKey: string): Promise<boolean>;
 }

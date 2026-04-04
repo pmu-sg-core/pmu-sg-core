@@ -2,10 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAgentGovernance, callLLM } from '@/lib/agent-config';
 import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
-import { routeWorkItem } from '@/adapters/router';
-import { JiraAdapter } from '@/adapters/jira';
-
-const jira = new JiraAdapter();
+import { routeWorkItem, checkCanAssign } from '@/adapters/router';
 
 function truncateAtSentence(body: string, limit: number): string {
   if (body.length <= limit) return body;
@@ -92,9 +89,8 @@ export async function POST(req: Request) {
       getSubscriberEmail(teamsUserId, 'teams'),
     ]);
 
-    const projectKey = process.env.JIRA_PROJECT_KEY ?? 'KAN';
     const canAssignTickets = subscriberEmail
-      ? await jira.checkAssignPermission(subscriberEmail, projectKey)
+      ? await checkCanAssign('pm.task_request', subscriberEmail)
       : false;
 
     const maxOutput = config?.max_output_tokens ?? 300;
