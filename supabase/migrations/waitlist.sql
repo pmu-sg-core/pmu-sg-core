@@ -1,19 +1,24 @@
--- Waitlist table for pmu.sg landing page signups
-create table if not exists public.waitlist (
-  id          uuid primary key default gen_random_uuid(),
-  email       text not null unique,
-  first_name  text,
-  last_name   text,
-  company     text,
-  reason      text,
-  source      text not null default 'landing_page',
-  created_at  timestamptz not null default now()
+-- Waitlist: landing page signups and omni-channel identity linking
+-- Consolidated from: waitlist.sql, waitlist_add_identity_columns.sql
+CREATE TABLE IF NOT EXISTS public.waitlist (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email           TEXT NOT NULL UNIQUE,
+    first_name      TEXT,
+    last_name       TEXT,
+    company         TEXT,
+    reason          TEXT,
+    source          TEXT NOT NULL DEFAULT 'landing_page',
+    phone           TEXT,
+    telegram_handle TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Only the service role can insert/read (called from backend API route)
-alter table public.waitlist enable row level security;
+CREATE INDEX IF NOT EXISTS idx_waitlist_identity ON public.waitlist(phone, email);
 
-create policy "Service role full access"
-  on public.waitlist
-  for all
-  using (auth.role() = 'service_role');
+-- Service role only access
+ALTER TABLE public.waitlist ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Service role full access"
+    ON public.waitlist
+    FOR ALL
+    USING (auth.role() = 'service_role');
