@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { JiraAdapter } from './jira';
+import { JiraAdapter } from './pmtool/jira';
 import type { WorkItem, PMAdapter } from './types';
 
 // Registry of available adapters

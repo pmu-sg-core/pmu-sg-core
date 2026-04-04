@@ -30,4 +30,4 @@ Thumbs.db
 docs/*.html
 
 # Teams manifest zip
-teams-manifest/*.zip
+teams-manifest/*.zip*.txt
