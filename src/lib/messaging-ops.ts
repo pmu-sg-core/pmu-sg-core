@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { TaskFieldsState } from './agent-config';
 
 // Check if sender is blacklisted
 export async function isBlacklisted(phoneNumber: string): Promise<boolean> {
@@ -70,14 +71,15 @@ export interface ConversationTurn {
   content: string;
 }
 
-// Fetch conversation history and gathering state for a sender (active record only)
+// Fetch conversation history, gathering state, and partial task fields (active record only)
 export async function getConversationState(senderId: string, channel: string): Promise<{
   history: ConversationTurn[];
   gatheringTask: boolean;
+  taskFields: TaskFieldsState;
 }> {
   const { data } = await supabase
     .from('active_conversations')
-    .select('conversation_history, gathering_task')
+    .select('conversation_history, gathering_task, task_fields')
     .eq('sender_id', senderId)
     .eq('channel', channel)
     .eq('is_active', true)
@@ -85,18 +87,20 @@ export async function getConversationState(senderId: string, channel: string): P
   return {
     history: (data?.conversation_history as ConversationTurn[]) ?? [],
     gatheringTask: data?.gathering_task ?? false,
+    taskFields: (data?.task_fields as TaskFieldsState) ?? {},
   };
 }
 
-// Upsert conversation history and gathering state on the active record
+// Upsert conversation history, gathering state, and partial task fields on the active record
 export async function updateConversationState(
   senderId: string,
   channel: string,
   history: ConversationTurn[],
   gatheringTask: boolean,
+  taskFields: TaskFieldsState,
   pmIssueKey?: string,
 ): Promise<void> {
-  const MAX_HISTORY = 20; // keep last 20 turns
+  const MAX_HISTORY = 20;
   const trimmed = history.slice(-MAX_HISTORY);
   await supabase
     .from('active_conversations')
@@ -106,6 +110,7 @@ export async function updateConversationState(
       is_active: true,
       conversation_history: trimmed,
       gathering_task: gatheringTask,
+      task_fields: gatheringTask ? taskFields : {},
       last_interaction_at: new Date().toISOString(),
       ...(pmIssueKey ? { last_pm_issue_key: pmIssueKey } : {}),
     }, { onConflict: 'sender_id,channel' });
@@ -133,6 +138,7 @@ export async function rotateConversationState(
       is_active: true,
       conversation_history: firstTurns,
       gathering_task: false,
+      task_fields: {},
       last_interaction_at: new Date().toISOString(),
     });
 }

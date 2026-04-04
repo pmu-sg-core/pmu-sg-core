@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAgentGovernance, callLLM } from '@/lib/agent-config';
+import { getAgentGovernance, callLLM, callLLMGathering, getNextField } from '@/lib/agent-config';
 import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
 import { routeWorkItem, checkCanAssign } from '@/adapters/router';
@@ -47,7 +47,6 @@ export async function POST(req: Request) {
   try {
     const activity = await req.json();
 
-    // Only handle message activities
     if (activity.type !== 'message') {
       return new NextResponse('OK', { status: 200 });
     }
@@ -83,8 +82,8 @@ export async function POST(req: Request) {
       return new NextResponse('OK', { status: 200 });
     }
 
-    // Stage 4: Load conversation history + check Jira assign permission
-    const [{ history, gatheringTask }, subscriberEmail] = await Promise.all([
+    // Stage 4: Load conversation state + check Jira assign permission
+    const [{ history, gatheringTask, taskFields }, subscriberEmail] = await Promise.all([
       getConversationState(teamsUserId, 'teams'),
       getSubscriberEmail(teamsUserId, 'teams'),
     ]);
@@ -94,44 +93,121 @@ export async function POST(req: Request) {
       : false;
 
     const maxOutput = config?.max_output_tokens ?? 300;
-    const systemPrompt = `${config?.system_prompt ?? 'You are Miyu, a helpful AI assistant.'}
+    const baseSystemPrompt = `${config?.system_prompt ?? 'You are Miyu, a helpful AI assistant.'}
 The user is on the ${config?.plan_type ?? 'pilot'} plan. They may send up to ${limit} characters per message. Your replies are capped at ${maxOutput} tokens.
-Always respond in plain text only — no markdown, no bullet points, no asterisks, no headers. This is Microsoft Teams.
-${gatheringTask ? 'You have an active task collection in progress. First assess whether the user\'s latest message clearly continues that task. If yes, ask for the next missing field. If the intent is ambiguous or unclear, use pm.task_resume_pending and probe for confirmation before continuing.' : ''}`;
+Always respond in plain text only — no markdown, no bullet points, no asterisks, no headers. This is Microsoft Teams.`;
 
     const llmStart = Date.now();
-    const { reply, classification, confidence, task } = await callLLM({
-      provider: config?.model_provider ?? 'anthropic',
-      model: config?.model_name ?? 'claude-sonnet-4-6',
-      text: incomingMsg,
-      maxTokens: maxOutput,
-      temperature: config?.temperature ?? 0.7,
-      systemPrompt,
-      conversationHistory: history,
-      canAssignTickets,
-    });
-    const processingTimeMs = Date.now() - llmStart;
 
-    // Stage 5: Route to PM tool if all task fields collected
+    let reply: string;
+    let classification: string;
+    let confidence: number = 1.0;
     let pmIssueKey: string | undefined;
-    if (classification === 'pm.task_request' && task) {
-      try {
-        const workItem = await routeWorkItem({
-          title: task.title,
-          description: task.description,
-          priority: task.priority,
-          assigneeEmail: task.assigneeEmail ?? undefined,
-          category: classification,
-          sourceMessageId: activityId,
-          actorPhone: teamsUserId,
-        });
-        pmIssueKey = workItem?.externalKey;
-      } catch (e) {
-        console.error('[Teams] routeWorkItem failed:', e);
+    let updatedTaskFields = { ...taskFields };
+    let stillGathering = false;
+
+    const nextField = getNextField(taskFields, canAssignTickets);
+
+    if (gatheringTask && nextField) {
+      // ── Gathering mode: focused extraction ──────────────────────────────────
+      const result = await callLLMGathering({
+        provider: config?.model_provider ?? 'anthropic',
+        model: config?.model_name ?? 'claude-sonnet-4-6',
+        text: incomingMsg,
+        maxTokens: maxOutput,
+        temperature: config?.temperature ?? 0.7,
+        systemPrompt: baseSystemPrompt,
+        conversationHistory: history,
+        taskFields,
+        nextField,
+        canAssignTickets,
+        platform: 'Microsoft Teams',
+      });
+
+      reply = result.reply;
+      classification = result.classification;
+
+      if (result.classification === 'off_topic') {
+        const currentTurn = [
+          { role: 'user' as const, content: incomingMsg },
+          { role: 'assistant' as const, content: reply },
+        ];
+        rotateConversationState(teamsUserId, 'teams', currentTurn).catch(console.error);
+        await sendTeamsReply(serviceUrl, conversationId, activityId, truncateAtSentence(reply, 1500));
+        logPost({ intakeLogId, senderId: teamsUserId, activityId, incomingMsg, reply, classification, confidence, config, processingTimeMs: Date.now() - llmStart });
+        return new NextResponse('OK', { status: 200 });
+      }
+
+      if (result.classification === 'ambiguous') {
+        stillGathering = true;
+      } else {
+        // continuing — merge extracted field
+        updatedTaskFields = { ...taskFields, ...result.extracted };
+        const newNextField = getNextField(updatedTaskFields, canAssignTickets);
+
+        if (!newNextField) {
+          // All fields collected — create ticket
+          classification = 'pm.task_request';
+          try {
+            const workItem = await routeWorkItem({
+              title: updatedTaskFields.title!,
+              description: updatedTaskFields.description!,
+              priority: updatedTaskFields.priority!,
+              assigneeEmail: updatedTaskFields.assigneeEmail ?? undefined,
+              category: 'pm.task_request',
+              sourceMessageId: activityId,
+              actorPhone: teamsUserId,
+            });
+            pmIssueKey = workItem?.externalKey;
+          } catch (e) {
+            console.error('[Teams] routeWorkItem failed:', e);
+          }
+          stillGathering = false;
+        } else {
+          stillGathering = true;
+        }
+      }
+    } else {
+      // ── Normal mode: intent classification ──────────────────────────────────
+      const result = await callLLM({
+        provider: config?.model_provider ?? 'anthropic',
+        model: config?.model_name ?? 'claude-sonnet-4-6',
+        text: incomingMsg,
+        maxTokens: maxOutput,
+        temperature: config?.temperature ?? 0.7,
+        systemPrompt: baseSystemPrompt,
+        conversationHistory: history,
+        canAssignTickets,
+      });
+
+      reply = result.reply;
+      classification = result.classification;
+      confidence = result.confidence;
+
+      if (classification === 'pm.task_request' && result.task) {
+        try {
+          const workItem = await routeWorkItem({
+            title: result.task.title,
+            description: result.task.description,
+            priority: result.task.priority,
+            assigneeEmail: result.task.assigneeEmail ?? undefined,
+            category: classification,
+            sourceMessageId: activityId,
+            actorPhone: teamsUserId,
+          });
+          pmIssueKey = workItem?.externalKey;
+        } catch (e) {
+          console.error('[Teams] routeWorkItem failed:', e);
+        }
+        stillGathering = false;
+      } else {
+        stillGathering = classification === 'pm.task_incomplete';
       }
     }
 
-    // Stage 6: Delivery — append ticket confirmation if created
+    const processingTimeMs = Date.now() - llmStart;
+
+    // Stage 5: Delivery
     const baseReply = truncateAtSentence(reply, 1500);
     const finalReply = pmIssueKey
       ? `${baseReply}\n\nTicket ${pmIssueKey} has been raised. The team will pick it up shortly.`
@@ -139,62 +215,71 @@ ${gatheringTask ? 'You have an active task collection in progress. First assess 
 
     await sendTeamsReply(serviceUrl, conversationId, activityId, finalReply);
 
-    // Update conversation history
-    const currentTurn = [
+    // Stage 6: Persist state
+    const updatedHistory = [
+      ...history,
       { role: 'user' as const, content: incomingMsg },
       { role: 'assistant' as const, content: reply },
     ];
-    const stillGathering = classification === 'pm.task_incomplete' || classification === 'pm.task_resume_pending';
-    const unrelated = gatheringTask && !stillGathering;
-    if (unrelated) {
-      // Retire the interrupted task conversation; open a fresh one for this new topic
-      rotateConversationState(teamsUserId, 'teams', currentTurn).catch(console.error);
-    } else {
-      const updatedHistory = [...history, ...currentTurn];
-      updateConversationState(teamsUserId, 'teams', updatedHistory, stillGathering, pmIssueKey).catch(console.error);
-    }
+    updateConversationState(teamsUserId, 'teams', updatedHistory, stillGathering, updatedTaskFields, pmIssueKey).catch(console.error);
 
-    // Log communication + audit trail (non-blocking)
-    logCommunication({
-      intakeLogId: intakeLogId!,
-      platform: 'teams',
-      platformMessageId: `${activityId}_reply`,
-      senderId: teamsUserId,
-      messageBody: finalReply,
-      rawPayload: { direction: 'outbound', model: config?.model_name },
-    }).then((commLogId: string | null) =>
-      logAuditTrail({
-        commLogId,
-        inputText: incomingMsg,
-        aiSummaryTitle: finalReply.slice(0, 100),
-        aiClassification: classification,
-        confidenceScore: confidence,
-        processingTimeMs,
-      })
-    ).catch(console.error);
-
-    writeAuditVault({
-      actorBsuid: teamsUserId,
-      reasoningTrace: {
-        input: incomingMsg,
-        output: finalReply,
-        classification,
-        confidence,
-        processing_time_ms: processingTimeMs,
-        plan_type: config?.plan_type ?? 'pilot',
-        platform: 'teams',
-        pm_issue_key: pmIssueKey ?? null,
-      },
-      actionTaken: pmIssueKey
-        ? `Teams reply sent to ${teamsUserId} — WorkItem ${pmIssueKey} created`
-        : `Teams reply sent to ${teamsUserId}`,
-      modelVersion: config?.model_name ?? 'claude-sonnet-4-6',
-      promptId: config?.prompt_id ?? 'v1.0',
-    }).catch(console.error);
+    // Audit (non-blocking)
+    logPost({ intakeLogId, senderId: teamsUserId, activityId, incomingMsg, reply: finalReply, classification, confidence, config, processingTimeMs, pmIssueKey });
 
     return new NextResponse('OK', { status: 200 });
   } catch (error) {
     console.error('Miyu Teams Error:', error);
     return new NextResponse('Error', { status: 500 });
   }
+}
+
+function logPost(params: {
+  intakeLogId: string | null;
+  senderId: string;
+  activityId: string;
+  incomingMsg: string;
+  reply: string;
+  classification: string;
+  confidence: number;
+  config: any;
+  processingTimeMs: number;
+  pmIssueKey?: string;
+}) {
+  const { intakeLogId, senderId, activityId, incomingMsg, reply, classification, confidence, config, processingTimeMs, pmIssueKey } = params;
+  logCommunication({
+    intakeLogId: intakeLogId!,
+    platform: 'teams',
+    platformMessageId: `${activityId}_reply`,
+    senderId,
+    messageBody: reply,
+    rawPayload: { direction: 'outbound', model: config?.model_name },
+  }).then((commLogId: string | null) =>
+    logAuditTrail({
+      commLogId,
+      inputText: incomingMsg,
+      aiSummaryTitle: reply.slice(0, 100),
+      aiClassification: classification,
+      confidenceScore: confidence,
+      processingTimeMs,
+    })
+  ).catch(console.error);
+
+  writeAuditVault({
+    actorBsuid: senderId,
+    reasoningTrace: {
+      input: incomingMsg,
+      output: reply,
+      classification,
+      confidence,
+      processing_time_ms: processingTimeMs,
+      plan_type: config?.plan_type ?? 'pilot',
+      platform: 'teams',
+      pm_issue_key: pmIssueKey ?? null,
+    },
+    actionTaken: pmIssueKey
+      ? `Teams reply sent to ${senderId} — WorkItem ${pmIssueKey} created`
+      : `Teams reply sent to ${senderId}`,
+    modelVersion: config?.model_name ?? 'claude-sonnet-4-6',
+    promptId: config?.prompt_id ?? 'v1.0',
+  }).catch(console.error);
 }
