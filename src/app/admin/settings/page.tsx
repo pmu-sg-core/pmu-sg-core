@@ -53,7 +53,7 @@ export default async function AdminSettingsPage() {
               <a href="/admin/settings" className="text-sm text-white bg-zinc-800 border border-zinc-700 px-3 py-1.5 rounded-lg">
                 Governance
               </a>
-              <a href="/dashboard" className="text-sm text-zinc-500 hover:text-white px-3 py-1.5 rounded-lg transition-colors">
+              <a href="/admin/dashboard" className="text-sm text-zinc-500 hover:text-white px-3 py-1.5 rounded-lg transition-colors">
                 Ontology
               </a>
             </nav>

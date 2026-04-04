@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { logoutAdmin } from '../admin/login/actions';
+import { logoutAdmin } from '../login/actions';
 import OntologyDashboard from './OntologyDashboard';
 
 export default async function OntologyPage() {
@@ -51,7 +51,7 @@ export default async function OntologyPage() {
                 Governance
               </a>
               <a
-                href="/dashboard"
+                href="/admin/dashboard"
                 className="text-sm text-white bg-zinc-800 border border-zinc-700 px-3 py-1.5 rounded-lg"
               >
                 Ontology
