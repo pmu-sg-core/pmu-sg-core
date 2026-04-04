@@ -85,7 +85,7 @@ export async function callLLM({
 IMPORTANT: Always respond with a valid JSON object in this exact format:
 {
   "reply": "<your plain text response to the user>",
-  "classification": "<one of: general_inquiry, task_request, status_update, complaint, out_of_scope>",
+  "classification": "<one of: general_inquiry, pm.task_request, status_update, complaint, out_of_scope>",
   "confidence": <a number between 0.0 and 1.0 indicating how confident you are in your reply>
 }
 Do not include any text outside the JSON object.`;
