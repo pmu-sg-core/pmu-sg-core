@@ -349,7 +349,7 @@ Prefer "continuing" whenever the reply could reasonably be an answer. Apply on_o
 </classification_rules>
 
 <response_rules>
-- If "continuing": extract the value for "${nextField}" exactly as stated. ${afterExtraction}
+- If "continuing": extract the value for "${nextField}" verbatim from user_inbound. Accept it as-is — do NOT rephrase, reformat, suggest alternatives, or ask any follow-up question about this field. ${afterExtraction}
 - If "ambiguous": ask "Just to confirm — are you still working on the task we were discussing, or is this something new?"
 - If "off_topic": follow the on_out_of_scope protocol.
 - Always respond in plain text only — no markdown. This is ${platform}.
