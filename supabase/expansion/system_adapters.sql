@@ -1,12 +1,14 @@
 -- System adapters: registry of all external tool integrations
 -- Phase 1 activates jira only — flip is_active to expand
-CREATE TABLE IF NOT EXISTS public.system_adapters (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code          TEXT UNIQUE NOT NULL,
-    name          TEXT NOT NULL,
-    function_id UUID REFERENCES public.business_functions(id),
-    is_active     BOOLEAN DEFAULT false,
-    created_at    TIMESTAMPTZ DEFAULT NOW()
+DROP TABLE IF EXISTS public.system_adapters CASCADE;
+
+CREATE TABLE public.system_adapters (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code        TEXT UNIQUE NOT NULL,
+    name        TEXT NOT NULL,
+    function_id UUID NOT NULL REFERENCES public.business_functions(id),
+    is_active   BOOLEAN DEFAULT false,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 INSERT INTO public.system_adapters (code, name, function_id, is_active)

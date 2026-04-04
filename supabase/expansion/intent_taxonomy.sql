@@ -1,12 +1,14 @@
 -- Intent taxonomy: namespaced intent codes per business function
 -- Phase 1 seeds pm.* only — add rows to expand
-CREATE TABLE IF NOT EXISTS public.intent_taxonomy (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+DROP TABLE IF EXISTS public.intent_taxonomy CASCADE;
+
+CREATE TABLE public.intent_taxonomy (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     function_id UUID NOT NULL REFERENCES public.business_functions(id),
-    code          TEXT UNIQUE NOT NULL,   -- e.g. 'pm.task_request', 'hr.leave_request'
-    label         TEXT NOT NULL,
-    is_active     BOOLEAN DEFAULT false,
-    created_at    TIMESTAMPTZ DEFAULT NOW()
+    code        TEXT UNIQUE NOT NULL,   -- e.g. 'pm.task_request', 'hr.leave_request'
+    label       TEXT NOT NULL,
+    is_active   BOOLEAN DEFAULT false,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Seed PM intents (Phase 1)

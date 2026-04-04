@@ -108,13 +108,14 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
 
     // Log communication + audit trail + vault (non-blocking)
     logCommunication({
+      intakeLogId: intakeLogId!,
+      platform: 'whatsapp',
       platformMessageId: `${messageSid}_reply`,
       senderId: senderPhone,
       messageBody: finalReply,
       rawPayload: { direction: 'outbound', model: config?.model_name },
     }).then((commLogId: string | null) =>
       logAuditTrail({
-        intakeLogId,
         commLogId,
         inputText: incomingMsg,
         aiSummaryTitle: finalReply.slice(0, 100),

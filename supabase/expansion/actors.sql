@@ -1,6 +1,9 @@
 -- Actors: entity registry for all communication participants
 -- Phase 1: human + bot only
-CREATE TABLE IF NOT EXISTS public.actors (
+DROP TABLE IF EXISTS public.actor_identities CASCADE;
+DROP TABLE IF EXISTS public.actors CASCADE;
+
+CREATE TABLE public.actors (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     actor_type   TEXT NOT NULL CHECK (actor_type IN ('human', 'bot', 'system', 'channel')),
     display_name TEXT,
@@ -8,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.actors (
 );
 
 -- Actor identities: resolves same human across multiple channels
-CREATE TABLE IF NOT EXISTS public.actor_identities (
+CREATE TABLE public.actor_identities (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     actor_id    UUID NOT NULL REFERENCES public.actors(id) ON DELETE CASCADE,
     channel_id  UUID NOT NULL REFERENCES public.channels(id),

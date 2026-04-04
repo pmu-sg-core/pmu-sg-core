@@ -1,6 +1,8 @@
 -- Channels: interaction layer (WhatsApp, Teams, Slack, etc.)
 -- Phase 1 activates whatsapp + teams only
-CREATE TABLE IF NOT EXISTS public.channels (
+DROP TABLE IF EXISTS public.channels CASCADE;
+
+CREATE TABLE public.channels (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code                  TEXT UNIQUE NOT NULL,
     name                  TEXT NOT NULL,

@@ -23,7 +23,6 @@ export async function logIntake(params: {
       platform_message_id: params.platformMessageId,
       sender_id: params.senderId,
       message_body: params.messageBody,
-      status: 'received',
       raw_payload: params.rawPayload,
     })
     .select('id')
@@ -33,6 +32,8 @@ export async function logIntake(params: {
 
 // Log outgoing reply to communication_logs
 export async function logCommunication(params: {
+  intakeLogId: string;
+  platform: string;
   platformMessageId: string;
   senderId: string;
   messageBody: string;
@@ -41,7 +42,8 @@ export async function logCommunication(params: {
   const { data } = await supabase
     .from('communication_logs')
     .insert({
-      platform: 'whatsapp',
+      intake_log_id: params.intakeLogId,
+      platform: params.platform,
       platform_message_id: params.platformMessageId,
       sender_id: params.senderId,
       message_body: params.messageBody,
@@ -54,7 +56,6 @@ export async function logCommunication(params: {
 
 // Log AI interaction to ai_audit_trail
 export async function logAuditTrail(params: {
-  intakeLogId: string | null;
   commLogId: string | null;
   inputText: string;
   aiSummaryTitle: string;
@@ -63,7 +64,6 @@ export async function logAuditTrail(params: {
   processingTimeMs: number;
 }): Promise<void> {
   await supabase.from('ai_audit_trail').insert({
-    whatsapp_log_id: params.intakeLogId,
     comm_log_id: params.commLogId,
     input_text: params.inputText,
     ai_summary_title: params.aiSummaryTitle,

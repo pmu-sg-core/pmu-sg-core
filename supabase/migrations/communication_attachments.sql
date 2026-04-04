@@ -1,7 +1,9 @@
 -- Communication attachments: multi-platform file tracking
-CREATE TABLE IF NOT EXISTS public.communication_attachments (
+DROP TABLE IF EXISTS public.communication_attachments CASCADE;
+
+CREATE TABLE public.communication_attachments (
     id                  UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    comm_log_id         UUID REFERENCES public.communication_logs(id) ON DELETE CASCADE,
+    comm_log_id         UUID NOT NULL REFERENCES public.communication_logs(id) ON DELETE CASCADE,
     file_name           TEXT,
     file_type           TEXT,
     file_size_bytes     BIGINT,

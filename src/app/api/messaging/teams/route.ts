@@ -121,13 +121,14 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
 
     // Log communication + audit trail (non-blocking)
     logCommunication({
+      intakeLogId: intakeLogId!,
+      platform: 'teams',
       platformMessageId: `${activityId}_reply`,
       senderId: teamsUserId,
       messageBody: finalReply,
-      rawPayload: { direction: 'outbound', platform: 'teams', model: config?.model_name },
+      rawPayload: { direction: 'outbound', model: config?.model_name },
     }).then((commLogId: string | null) =>
       logAuditTrail({
-        intakeLogId,
         commLogId,
         inputText: incomingMsg,
         aiSummaryTitle: finalReply.slice(0, 100),

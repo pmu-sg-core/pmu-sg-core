@@ -1,6 +1,8 @@
 -- Plan entitlements: flexible per-tier limits replacing flat config columns
 -- Add new entitlement_type rows to extend without schema changes
-CREATE TABLE IF NOT EXISTS public.plan_entitlements (
+DROP TABLE IF EXISTS public.plan_entitlements CASCADE;
+
+CREATE TABLE public.plan_entitlements (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     plan_tier_id     UUID NOT NULL REFERENCES public.plan_tiers(id) ON DELETE CASCADE,
     entitlement_type TEXT NOT NULL,   -- 'max_channels', 'max_humans', 'max_recipients', etc.
