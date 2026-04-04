@@ -1,5 +1,5 @@
 // Canonical request/response contract for all LLM provider adapters.
-// Mirrors the PMAdapter pattern in src/adapters/types.ts.
+// Mirrors the PMAdapter pattern in src/adapters/pmtool/types.ts.
 
 export interface LLMRequest {
   model: string;

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { JiraAdapter } from './pmtool/jira';
-import type { WorkItem, PMAdapter } from './types';
+import type { WorkItem, PMAdapter } from './pmtool/types';
 
 // Registry of available adapters
 const adapters: Record<string, PMAdapter> = {

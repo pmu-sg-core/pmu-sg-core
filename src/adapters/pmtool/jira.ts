@@ -1,4 +1,4 @@
-import type { WorkItem, PMAdapter } from '../types';
+import type { WorkItem, PMAdapter } from './types';
 
 export class JiraAdapter implements PMAdapter {
   platform = 'jira';
