@@ -176,13 +176,15 @@ function buildLocaleContext(hints: string | null | undefined): string {
 
 /** <operational_contract> — hard capability boundary + failure protocol.
  *  Prevents capability hallucination and defines the pivot on out-of-scope requests. */
-function buildOperationalContract(capabilities: string, constraints: string, onOutOfScope: string): string {
+function buildOperationalContract(capabilities: string[], constraints: string[], onOutOfScope: string): string {
+  const cap = capabilities.map(c => `    <item>${c}</item>`).join('\n');
+  const con = constraints.map(c => `    <item>${c}</item>`).join('\n');
   return `<operational_contract>
   <capabilities>
-${capabilities}
+${cap}
   </capabilities>
   <constraints>
-${constraints}
+${con}
   </constraints>
   <exception_handling>
     <on_out_of_scope>${onOutOfScope}</on_out_of_scope>
@@ -237,10 +239,14 @@ ${buildLocaleContext(localeHints)}
 ${buildInteractionAnchor(lastOutbound, text, normalModeIntentHint(lastOutbound))}
 
 ${buildOperationalContract(
-    `    - Create new tasks by collecting: title, description, priority${canAssignTickets ? ', assignee email' : ''}.
-    - Answer general questions about pmu.sg and its features.`,
-    `    - Cannot set due dates, update existing tickets, look up rosters, or list available assignees.
-    - Cannot collect fields outside the defined set.`,
+    [
+      `Create new tasks by collecting: title, description, priority${canAssignTickets ? ', assignee email' : ''}.`,
+      `Answer general questions about pmu.sg and its features.`,
+    ],
+    [
+      `Cannot set due dates, update existing tickets, look up rosters, or list available assignees.`,
+      `Cannot collect fields outside the defined set.`,
+    ],
     `Politely decline and explain what Miyu can do: "I can help create tasks and answer general questions about pmu.sg. I'm not able to [action requested]."`
   )}
 
@@ -355,8 +361,12 @@ ${buildSessionState(taskFields, nextField, canAssignTickets)}
 ${buildInteractionAnchor(lastOutbound, text, `Direct answer to field request: ${nextField}`)}
 
 ${buildOperationalContract(
-    `    - Collect task fields in order: title, description, priority${canAssignTickets ? ', assignee email' : ''}.`,
-    `    - Cannot set due dates, update tickets, look up rosters, or collect fields outside the defined set.`,
+    [
+      `Collect task fields in order: title, description, priority${canAssignTickets ? ', assignee email' : ''}.`,
+    ],
+    [
+      `Cannot set due dates, update tickets, look up rosters, or collect fields outside the defined set.`,
+    ],
     `Classify as "off_topic". Acknowledge briefly that the request is outside current scope and that the task is set aside.`
   )}
 
