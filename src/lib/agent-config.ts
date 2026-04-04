@@ -1,22 +1,29 @@
 import { supabase } from './supabase';
-import Anthropic from '@anthropic-ai/sdk';
+import { AnthropicAdapter } from '@/adapters/llm/anthropic';
+import type { LLMAdapter } from '@/adapters/llm/types';
 
-export interface AgentGovernance {
-  // Plan
-  plan_type: string;
-  // Resource Limits
+// ── Supabase return shape ─────────────────────────────────────────────────────
+
+interface ConfigSettings {
   max_input_chars: number;
   max_output_tokens: number;
-  // AI Intelligence
   model_provider: string;
   model_name: string;
-  // Personality
   temperature: number;
   system_prompt: string;
   prompt_id: string;
-  // Capabilities
   can_access_kb: boolean;
   enable_history: boolean;
+}
+
+interface SubscriptionRow {
+  plan_type: string;
+  plan_tiers: { config_settings: ConfigSettings | ConfigSettings[] }
+            | { config_settings: ConfigSettings | ConfigSettings[] }[];
+}
+
+export interface AgentGovernance extends ConfigSettings {
+  plan_type: string;
   can_assign_tickets: boolean;
 }
 
@@ -49,16 +56,31 @@ export async function getAgentGovernance(
 
   if (error || !data) return null;
 
-  const tiers = (data as any).plan_tiers;
-  const settings = Array.isArray(tiers) ? tiers[0]?.config_settings : tiers?.config_settings;
-  const config = Array.isArray(settings) ? settings[0] : settings;
+  const row = data as unknown as SubscriptionRow;
+  const tier = Array.isArray(row.plan_tiers) ? row.plan_tiers[0] : row.plan_tiers;
+  const rawConfig = tier?.config_settings;
+  const config: ConfigSettings | null = rawConfig
+    ? (Array.isArray(rawConfig) ? rawConfig[0] : rawConfig) ?? null
+    : null;
 
   if (!config) return null;
 
-  return { ...config, plan_type: (data as any).plan_type };
+  return { ...config, plan_type: row.plan_type, can_assign_tickets: false };
 }
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+// ── LLM adapter registry (mirrors PM adapter pattern in src/adapters/router.ts) ─
+
+const llmAdapters: Record<string, LLMAdapter> = {
+  anthropic: new AnthropicAdapter(),
+  // openai:  new OpenAIAdapter(),
+  // gemini:  new GeminiAdapter(),
+};
+
+function getLLMAdapter(provider: string): LLMAdapter {
+  const adapter = llmAdapters[provider];
+  if (!adapter) throw new Error(`Unsupported LLM provider: ${provider}`);
+  return adapter;
+}
 
 // ── Task field types ──────────────────────────────────────────────────────────
 
@@ -86,10 +108,12 @@ export function getNextField(
   return active.find(f => !fields[f]) ?? null;
 }
 
+const HISTORY_WINDOW = 10;
+
 // ── Prompt envelope helpers ───────────────────────────────────────────────────
 
-/** <session_state> — explicit field snapshot + transition reasoning (the "delta").
- *  Prevents the model from re-deriving state from history or looping on answered fields. */
+/** <session_state> — explicit field snapshot + transition delta.
+ *  Prevents re-deriving state from history and looping on answered fields. */
 function buildSessionState(
   taskFields: TaskFieldsState,
   nextField: keyof TaskFieldsState,
@@ -191,11 +215,8 @@ export async function callLLM({
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   canAssignTickets?: boolean;
 }): Promise<LLMResult> {
-  const taskSchema = canAssignTickets
-    ? `{ "title": "...", "description": "...", "priority": "Low|Medium|High|Critical", "assigneeEmail": "email@example.com or null" }`
-    : `{ "title": "...", "description": "...", "priority": "Low|Medium|High|Critical" }`;
-
-  const lastOutbound = conversationHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? null;
+  const recentHistory = conversationHistory.slice(-HISTORY_WINDOW);
+  const lastOutbound = recentHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? null;
 
   const structuredSystem = `${systemPrompt}
 
@@ -215,50 +236,53 @@ ${buildOperationalContract(
 - Use "out_of_scope" for anything listed in the operational_contract constraints. Apply the on_out_of_scope protocol.
 - If last_outbound was a confirmation and the user replied "yes", "ok", "sure", or similar, treat it as confirmed — do not ask for clarification.
 - Use "general_inquiry", "status_update", or "complaint" for everything else.
-</classification_rules>
+</classification_rules>`;
 
-<output_format>
-Always respond with a valid JSON object in this exact format:
-{
-  "reply": "<your plain text response to the user>",
-  "classification": "<one of: general_inquiry, pm.task_request, pm.task_incomplete, status_update, complaint, out_of_scope>",
-  "confidence": <a number between 0.0 and 1.0>,
-  "task": ${taskSchema}
-}
-The "task" field is REQUIRED when classification is "pm.task_request". Omit it for all other classifications.
-Do not include any text outside the JSON object.
-</output_format>`;
+  const taskProperties: Record<string, unknown> = {
+    title:       { type: 'string' },
+    description: { type: 'string' },
+    priority:    { type: 'string', enum: ['Low', 'Medium', 'High', 'Critical'] },
+    ...(canAssignTickets ? { assigneeEmail: { type: ['string', 'null'] } } : {}),
+  };
 
-  if (provider === 'anthropic') {
-    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-      ...conversationHistory,
-      { role: 'user', content: text },
-    ];
-
-    const msg = await anthropic.messages.create({
+  try {
+    const input = await getLLMAdapter(provider).call({
       model,
-      max_tokens: maxTokens,
+      systemPrompt: structuredSystem,
+      messages: [...recentHistory, { role: 'user', content: text }],
+      tools: [{
+        name: 'route_intent',
+        description: 'Classify user intent and extract task fields if applicable.',
+        input_schema: {
+          type: 'object' as const,
+          properties: {
+            reply:          { type: 'string', description: 'Plain text response to the user, no markdown.' },
+            classification: { type: 'string', enum: ['general_inquiry', 'pm.task_request', 'pm.task_incomplete', 'status_update', 'complaint', 'out_of_scope'] },
+            confidence:     { type: 'number', description: 'Confidence score 0.0–1.0' },
+            task: {
+              type: 'object',
+              description: 'Required when classification is pm.task_request.',
+              properties: taskProperties,
+              required: ['title', 'description', 'priority'],
+            },
+          },
+          required: ['reply', 'classification', 'confidence'],
+        },
+      }],
+      toolName: 'route_intent',
+      maxTokens,
       temperature,
-      system: structuredSystem,
-      messages,
     });
-
-    const raw = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
-    try {
-      const parsed = JSON.parse(cleaned);
-      return {
-        reply: parsed.reply ?? "I'm sorry, I couldn't process that.",
-        classification: parsed.classification ?? 'general_inquiry',
-        confidence: parsed.confidence ?? 0.5,
-        task: parsed.task,
-      };
-    } catch {
-      return { reply: cleaned, classification: 'general_inquiry', confidence: 0.5 };
-    }
+    return {
+      reply:          (input.reply as string)          ?? "I'm sorry, I couldn't process that.",
+      classification: (input.classification as string) ?? 'general_inquiry',
+      confidence:     (input.confidence as number)     ?? 0.5,
+      task:           input.task as TaskFields | undefined,
+    };
+  } catch (e) {
+    console.error('[callLLM] API error:', e);
+    return { reply: "I'm sorry, something went wrong. Please try again.", classification: 'general_inquiry', confidence: 0 };
   }
-
-  return { reply: 'Unsupported AI provider.', classification: 'out_of_scope', confidence: 1.0 };
 }
 
 // ── Gathering-mode LLM (focused field extraction) ────────────────────────────
@@ -294,14 +318,14 @@ export async function callLLMGathering({
   canAssignTickets: boolean;
   platform: 'WhatsApp' | 'Microsoft Teams';
 }): Promise<GatheringResult> {
-  // What to ask for after this field (if anything)
+  const recentHistory = conversationHistory.slice(-HISTORY_WINDOW);
+  const lastOutbound = recentHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? '(none)';
+
   const hypothetical = { ...taskFields, [nextField]: 'filled' };
   const nextNextField = getNextField(hypothetical, canAssignTickets);
   const afterExtraction = nextNextField
     ? `Then ask for the next missing field: ${FIELD_LABELS[nextNextField]}.`
     : `All required fields will then be complete — reply with a brief confirmation that you have everything and will create the ticket now. Do not mention a ticket number yet.`;
-
-  const lastOutbound = conversationHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? '(none)';
 
   const gatheringSystem = `${systemPrompt}
 
@@ -329,41 +353,46 @@ Prefer "continuing" whenever the reply could reasonably be an answer. Apply on_o
 - If "ambiguous": ask "Just to confirm — are you still working on the task we were discussing, or is this something new?"
 - If "off_topic": follow the on_out_of_scope protocol.
 - Always respond in plain text only — no markdown. This is ${platform}.
-</response_rules>
+</response_rules>`;
 
-<output_format>
-Respond with this JSON and nothing else:
-{
-  "reply": "<your plain text response>",
-  "classification": "continuing" | "ambiguous" | "off_topic",
-  "extracted": { "${nextField}": "<value>" }
-}
-Omit "extracted" when classification is not "continuing".
-</output_format>`;
-
-  if (provider === 'anthropic') {
-    const msg = await anthropic.messages.create({
+  try {
+    const input = await getLLMAdapter(provider).call({
       model,
-      max_tokens: maxTokens,
-      temperature,
-      system: gatheringSystem,
+      systemPrompt: gatheringSystem,
       messages: [{ role: 'user', content: text }],
+      tools: [{
+        name: 'extract_field',
+        description: 'Classify the user reply and extract the field value if the reply is continuing.',
+        input_schema: {
+          type: 'object' as const,
+          properties: {
+            reply:          { type: 'string', description: 'Plain text response to the user, no markdown.' },
+            classification: { type: 'string', enum: ['continuing', 'ambiguous', 'off_topic'] },
+            extracted: {
+              type: 'object',
+              description: `Include only when classification is "continuing". Provide the extracted value for field: ${nextField}.`,
+              properties: {
+                title:         { type: 'string' },
+                description:   { type: 'string' },
+                priority:      { type: 'string', enum: ['Low', 'Medium', 'High', 'Critical'] },
+                assigneeEmail: { type: ['string', 'null'] },
+              },
+            },
+          },
+          required: ['reply', 'classification'],
+        },
+      }],
+      toolName: 'extract_field',
+      maxTokens,
+      temperature,
     });
-
-    const raw = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
-    try {
-      const parsed = JSON.parse(cleaned);
-      return {
-        reply: parsed.reply ?? "Got it.",
-        classification: parsed.classification ?? 'continuing',
-        extracted: parsed.extracted,
-      };
-    } catch {
-      // If parsing fails, treat as continuing with raw text as the field value
-      return { reply: "Got it.", classification: 'continuing', extracted: { [nextField]: text } as Partial<TaskFieldsState> };
-    }
+    return {
+      reply:          (input.reply as string) ?? 'Got it.',
+      classification: (input.classification as GatheringResult['classification']) ?? 'continuing',
+      extracted:      input.extracted as Partial<TaskFieldsState> | undefined,
+    };
+  } catch (e) {
+    console.error('[callLLMGathering] API error:', e);
+    return { reply: 'Got it.', classification: 'continuing', extracted: { [nextField]: text } as Partial<TaskFieldsState> };
   }
-
-  return { reply: 'Unsupported AI provider.', classification: 'off_topic' };
 }
