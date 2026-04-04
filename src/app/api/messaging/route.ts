@@ -89,7 +89,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
 
     // Stage 5: Route to PM tool if classified as task_request (non-blocking)
     let pmIssueKey: string | undefined;
-    if (classification === 'task_request') {
+    if (classification === 'pm.task_request') {
       routeWorkItem({
         title: reply.slice(0, 100),
         description: incomingMsg,

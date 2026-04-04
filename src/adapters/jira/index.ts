@@ -14,7 +14,7 @@ export class JiraAdapter implements PMAdapter {
   }
 
   private get baseUrl() {
-    return `https://${process.env.JIRA_DOMAIN}/rest/api/3`;
+    return `${process.env.JIRA_BASE_URL}/rest/api/3`;
   }
 
   private toJiraPriority(priority: WorkItem['priority']): string {
