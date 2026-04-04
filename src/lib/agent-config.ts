@@ -234,6 +234,7 @@ ${buildOperationalContract(
 - Use "pm.task_incomplete" when the user signals task intent. Ask only for the title first.
 - Use "pm.task_request" ONLY when you have ALL required fields in one shot. Populate the "task" field.
 - Use "out_of_scope" for anything listed in the operational_contract constraints. Apply the on_out_of_scope protocol.
+- If last_outbound was a question and the user replied with any answer, accept the answer verbatim — do NOT rephrase, reformat, or ask for confirmation of what they just said. Move to the next question.
 - If last_outbound was a confirmation and the user replied "yes", "ok", "sure", or similar, treat it as confirmed — do not ask for clarification.
 - Use "general_inquiry", "status_update", or "complaint" for everything else.
 </classification_rules>`;
