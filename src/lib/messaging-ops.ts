@@ -91,7 +91,9 @@ export async function getConversationState(senderId: string, channel: string): P
   };
 }
 
-// Upsert conversation history, gathering state, and partial task fields on the active record
+// Update conversation history, gathering state, and partial task fields on the active record.
+// Uses UPDATE first (matches partial unique index WHERE is_active=true), falls back to INSERT
+// for first-time senders. Supabase upsert cannot express partial index ON CONFLICT clauses.
 export async function updateConversationState(
   senderId: string,
   channel: string,
@@ -102,18 +104,27 @@ export async function updateConversationState(
 ): Promise<void> {
   const MAX_HISTORY = 20;
   const trimmed = history.slice(-MAX_HISTORY);
-  await supabase
+  const payload = {
+    conversation_history: trimmed,
+    gathering_task: gatheringTask,
+    task_fields: gatheringTask ? taskFields : {},
+    last_interaction_at: new Date().toISOString(),
+    ...(pmIssueKey ? { last_pm_issue_key: pmIssueKey } : {}),
+  };
+
+  const { count } = await supabase
     .from('active_conversations')
-    .upsert({
-      sender_id: senderId,
-      channel,
-      is_active: true,
-      conversation_history: trimmed,
-      gathering_task: gatheringTask,
-      task_fields: gatheringTask ? taskFields : {},
-      last_interaction_at: new Date().toISOString(),
-      ...(pmIssueKey ? { last_pm_issue_key: pmIssueKey } : {}),
-    }, { onConflict: 'sender_id,channel' });
+    .update(payload)
+    .eq('sender_id', senderId)
+    .eq('channel', channel)
+    .eq('is_active', true)
+    .select('id', { count: 'exact', head: true });
+
+  if (!count) {
+    await supabase
+      .from('active_conversations')
+      .insert({ sender_id: senderId, channel, is_active: true, ...payload });
+  }
 }
 
 // Retire the current active conversation and open a fresh one for an unrelated message.
