@@ -100,19 +100,22 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
     });
     const processingTimeMs = Date.now() - llmStart;
 
-    // Stage 5: Route to PM tool if task_request (non-blocking)
+    // Stage 5: Route to PM tool if task_request
     let pmIssueKey: string | undefined;
     if (classification === 'pm.task_request') {
-      routeWorkItem({
-        title: reply.slice(0, 100),
-        description: incomingMsg,
-        priority: 'Medium',
-        category: classification,
-        sourceMessageId: activityId,
-        actorPhone: teamsUserId,
-      }).then((workItem) => {
+      try {
+        const workItem = await routeWorkItem({
+          title: reply.slice(0, 100),
+          description: incomingMsg,
+          priority: 'Medium',
+          category: classification,
+          sourceMessageId: activityId,
+          actorPhone: teamsUserId,
+        });
         pmIssueKey = workItem?.externalKey;
-      }).catch(console.error);
+      } catch (e) {
+        console.error('[Teams] routeWorkItem failed:', e);
+      }
     }
 
     // Stage 6: Delivery
