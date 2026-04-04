@@ -86,6 +86,76 @@ export function getNextField(
   return active.find(f => !fields[f]) ?? null;
 }
 
+// ── Prompt envelope helpers ───────────────────────────────────────────────────
+
+/** <session_state> — explicit field snapshot + transition reasoning (the "delta").
+ *  Prevents the model from re-deriving state from history or looping on answered fields. */
+function buildSessionState(
+  taskFields: TaskFieldsState,
+  nextField: keyof TaskFieldsState,
+  canAssignTickets: boolean,
+): string {
+  const active = canAssignTickets ? FIELD_ORDER : FIELD_ORDER.slice(0, 3);
+  const dataStore = active.map(f => {
+    const val = taskFields[f];
+    return val
+      ? `    <field status="complete" id="${f}">${val}</field>`
+      : `    <field status="pending"  id="${f}">null</field>`;
+  }).join('\n');
+
+  const completed = active.filter(f => taskFields[f]);
+  const reasoning = completed.length === 0
+    ? 'Task collection started; requesting title.'
+    : `User provided ${completed.at(-1)}; requesting ${nextField}.`;
+
+  return `<session_state>
+  <flow_position>gathering_requirements</flow_position>
+  <data_store>
+${dataStore}
+  </data_store>
+  <reasoning>${reasoning}</reasoning>
+</session_state>`;
+}
+
+/** <interaction_anchor> — grounds short/terse replies against what was just asked.
+ *  The intent_hint tells the model how to interpret the inbound message. */
+function buildInteractionAnchor(
+  lastOutbound: string | null,
+  userInbound: string,
+  intentHint: string,
+): string {
+  if (!lastOutbound) return '';
+  return `<interaction_anchor>
+  <last_outbound>${lastOutbound}</last_outbound>
+  <user_inbound>${userInbound}</user_inbound>
+  <intent_hint>${intentHint}</intent_hint>
+</interaction_anchor>`;
+}
+
+/** Derive intent hint for normal-mode callLLM from the last assistant message. */
+function normalModeIntentHint(lastOutbound: string | null): string {
+  if (!lastOutbound) return 'Opening message in new conversation.';
+  if (lastOutbound.trimEnd().endsWith('?')) return 'Direct answer or response to the previous question.';
+  if (/\b(confirm|shall I|go ahead|update|creat|rais)\b/i.test(lastOutbound)) return 'Confirmation of a proposed action.';
+  return 'Follow-up reply in ongoing conversation.';
+}
+
+/** <operational_contract> — hard capability boundary + failure protocol.
+ *  Prevents capability hallucination and defines the pivot on out-of-scope requests. */
+function buildOperationalContract(capabilities: string, constraints: string, onOutOfScope: string): string {
+  return `<operational_contract>
+  <capabilities>
+${capabilities}
+  </capabilities>
+  <constraints>
+${constraints}
+  </constraints>
+  <exception_handling>
+    <on_out_of_scope>${onOutOfScope}</on_out_of_scope>
+  </exception_handling>
+</operational_contract>`;
+}
+
 // ── Normal-mode LLM (intent classification) ──────────────────────────────────
 
 export interface TaskFields {
@@ -125,15 +195,25 @@ export async function callLLM({
     ? `{ "title": "...", "description": "...", "priority": "Low|Medium|High|Critical", "assigneeEmail": "email@example.com or null" }`
     : `{ "title": "...", "description": "...", "priority": "Low|Medium|High|Critical" }`;
 
-  const lastAssistantMsgNormal = conversationHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? null;
+  const lastOutbound = conversationHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? null;
 
   const structuredSystem = `${systemPrompt}
 
-${lastAssistantMsgNormal ? `<previous_question>\n${lastAssistantMsgNormal}\n</previous_question>\n` : ''}<classification_rules>
+${buildInteractionAnchor(lastOutbound, text, normalModeIntentHint(lastOutbound))}
+
+${buildOperationalContract(
+    `    - Create new tasks by collecting: title, description, priority${canAssignTickets ? ', assignee email' : ''}.
+    - Answer general questions about pmu.sg and its features.`,
+    `    - Cannot set due dates, update existing tickets, look up rosters, or list available assignees.
+    - Cannot collect fields outside the defined set.`,
+    `Politely decline and explain what Miyu can do: "I can help create tasks and answer general questions about pmu.sg. I'm not able to [action requested]."`
+  )}
+
+<classification_rules>
 - Use "pm.task_incomplete" when the user signals task intent. Ask only for the title first.
-- Use "pm.task_request" ONLY when you have collected ALL required fields in one shot from the user's message. Populate the "task" field.
-- Use "out_of_scope" for any request Miyu cannot action: due date changes, ticket updates, roster lookups, assignee lists, or anything outside creating a new task or answering a general question. Explain briefly what Miyu can and cannot do.
-- If the previous_question was a confirmation and the user replied "yes", "ok", "sure", or similar, treat it as confirmation and proceed accordingly — do not ask for clarification.
+- Use "pm.task_request" ONLY when you have ALL required fields in one shot. Populate the "task" field.
+- Use "out_of_scope" for anything listed in the operational_contract constraints. Apply the on_out_of_scope protocol.
+- If last_outbound was a confirmation and the user replied "yes", "ok", "sure", or similar, treat it as confirmed — do not ask for clarification.
 - Use "general_inquiry", "status_update", or "complaint" for everything else.
 </classification_rules>
 
@@ -214,12 +294,6 @@ export async function callLLMGathering({
   canAssignTickets: boolean;
   platform: 'WhatsApp' | 'Microsoft Teams';
 }): Promise<GatheringResult> {
-  // Build a readable snapshot of what's been collected so far
-  const active = canAssignTickets ? FIELD_ORDER : FIELD_ORDER.slice(0, 3);
-  const stateLines = active.map(f =>
-    `  ${f}: ${taskFields[f] ? `"${taskFields[f]}"` : '(not yet collected)'}`
-  ).join('\n');
-
   // What to ask for after this field (if anything)
   const hypothetical = { ...taskFields, [nextField]: 'filled' };
   const nextNextField = getNextField(hypothetical, canAssignTickets);
@@ -227,38 +301,33 @@ export async function callLLMGathering({
     ? `Then ask for the next missing field: ${FIELD_LABELS[nextNextField]}.`
     : `All required fields will then be complete — reply with a brief confirmation that you have everything and will create the ticket now. Do not mention a ticket number yet.`;
 
-  // The last assistant message, for grounding short replies
-  const lastAssistantMsg = conversationHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? '(none)';
+  const lastOutbound = conversationHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? '(none)';
 
   const gatheringSystem = `${systemPrompt}
 
-<task_state>
-${stateLines}
-</task_state>
+${buildSessionState(taskFields, nextField, canAssignTickets)}
 
-<previous_question>
-${lastAssistantMsg}
-</previous_question>
+${buildInteractionAnchor(lastOutbound, text, `Direct answer to field request: ${nextField}`)}
 
-<user_reply>
-${text}
-</user_reply>
+${buildOperationalContract(
+    `    - Collect task fields in order: title, description, priority${canAssignTickets ? ', assignee email' : ''}.`,
+    `    - Cannot set due dates, update tickets, look up rosters, or collect fields outside the defined set.`,
+    `Classify as "off_topic". Acknowledge briefly that the request is outside current scope and that the task is set aside.`
+  )}
 
 <classification_rules>
-Classify the user_reply as one of:
-- "continuing" — plausible answer to the previous_question, even if short (e.g. "Critical", "High", "John", "yes").
-- "ambiguous"  — equally plausible as an answer or as a new unrelated request; you genuinely cannot tell.
-- "off_topic"  — clearly has no connection to the task or the previous_question.
+Classify the user_inbound as one of:
+- "continuing" — plausible answer to last_outbound, even if short (e.g. "Critical", "High", "yes", a name).
+- "ambiguous"  — equally plausible as an answer or as a new unrelated request; genuinely cannot tell.
+- "off_topic"  — clearly unrelated to the task or last_outbound, including any request listed in constraints.
 
-Defaults: prefer "continuing" whenever the reply could reasonably be an answer.
-Use "ambiguous" only when truly split. Use "off_topic" only when clearly unrelated.
+Prefer "continuing" whenever the reply could reasonably be an answer. Apply on_out_of_scope for anything in constraints.
 </classification_rules>
 
 <response_rules>
-- If "continuing": extract the value for "${nextField}" exactly as the requestor stated it. ${afterExtraction}
+- If "continuing": extract the value for "${nextField}" exactly as stated. ${afterExtraction}
 - If "ambiguous": ask "Just to confirm — are you still working on the task we were discussing, or is this something new?"
-- If "off_topic": acknowledge briefly that the task is being set aside.
-- You only collect these fields: title, description, priority${canAssignTickets ? ', assignee email' : ''}. Do NOT acknowledge, confirm, or act on requests for due dates, ticket updates, roster lookups, or any other operation — classify those as "off_topic" and note it is outside your current scope.
+- If "off_topic": follow the on_out_of_scope protocol.
 - Always respond in plain text only — no markdown. This is ${platform}.
 </response_rules>
 
