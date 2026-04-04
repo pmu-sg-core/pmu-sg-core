@@ -368,10 +368,18 @@ Prefer "continuing" whenever the reply could reasonably be an answer. Apply on_o
 </classification_rules>
 
 <response_rules>
-- If "continuing": extract the value for "${nextField}" verbatim from user_inbound. Do NOT rephrase, reformat, suggest alternatives, or ask any follow-up question about this field. ${afterExtraction}
-- If "ambiguous": ask "Just to confirm — are you still working on the task we were discussing, or is this something new?"
-- If "off_topic": follow the on_out_of_scope protocol.
-- Always respond in plain text only — no markdown. This is ${platform}.
+  <on_continuing>
+    <extraction>Extract the value for "${nextField}" VERBATIM from user_inbound into the extracted object. Do not clean, rephrase, or normalise — except strip trailing filler particles if locale_context instructs it.</extraction>
+    <reply_template>Got it. ${afterExtraction}</reply_template>
+    <forbidden>Do NOT ask again for "${nextField}". Do NOT rephrase, confirm, or request a shorter version of the value just provided. Do NOT add commentary before or after the reply_template.</forbidden>
+  </on_continuing>
+  <on_ambiguous>
+    <reply_template>Just to confirm — are you still working on the task we were discussing, or is this something new?</reply_template>
+  </on_ambiguous>
+  <on_off_topic>
+    <action>Follow the on_out_of_scope protocol defined in operational_contract.</action>
+  </on_off_topic>
+  <global_constraints>Plain text only — no markdown, no bullet points. This is ${platform}.</global_constraints>
 </response_rules>`;
 
   try {
