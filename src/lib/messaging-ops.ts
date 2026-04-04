@@ -114,11 +114,10 @@ export async function updateConversationState(
 
   const { count } = await supabase
     .from('active_conversations')
-    .update(payload)
+    .update(payload, { count: 'exact' })
     .eq('sender_id', senderId)
     .eq('channel', channel)
-    .eq('is_active', true)
-    .select('id', { count: 'exact', head: true });
+    .eq('is_active', true);
 
   if (!count) {
     await supabase
