@@ -245,12 +245,14 @@ ${buildOperationalContract(
   )}
 
 <classification_rules>
-- Use "pm.task_incomplete" when the user signals task intent. Ask only for the title first.
-- Use "pm.task_request" ONLY when you have ALL required fields in one shot. Populate the "task" field.
-- Use "out_of_scope" for anything listed in the operational_contract constraints. Apply the on_out_of_scope protocol.
-- If last_outbound was a question and the user replied with any answer, accept the answer verbatim — do NOT rephrase, reformat, or ask for confirmation of what they just said. Move to the next question.
-- If last_outbound was a confirmation and the user replied "yes", "ok", "sure", or similar, treat it as confirmed — do not ask for clarification.
-- Use "general_inquiry", "status_update", or "complaint" for everything else.
+  <rule intent="pm.task_incomplete">User signals task creation intent but has not provided all required fields. Ask only for the title first — nothing else.</rule>
+  <rule intent="pm.task_request">User has provided ALL required fields in a single message. Populate the task object fully. Only use this when title, description, and priority are all present.</rule>
+  <rule intent="out_of_scope">Request matches any item in operational_contract constraints. Apply the on_out_of_scope protocol immediately.</rule>
+  <rule intent="general_inquiry|status_update|complaint">Everything else that is not task creation or out of scope.</rule>
+  <answer_handling>
+    <on_answer_to_question>If last_outbound ended with a question and user_inbound is any reply, accept it verbatim. Do NOT rephrase, reformat, or ask for confirmation. Move to the next question.</on_answer_to_question>
+    <on_confirmation>If last_outbound proposed an action and user replied "yes", "ok", "sure", "can", or similar, treat it as confirmed. Do not ask again.</on_confirmation>
+  </answer_handling>
 </classification_rules>`;
 
   const taskProperties: Record<string, unknown> = {
@@ -359,12 +361,10 @@ ${buildOperationalContract(
   )}
 
 <classification_rules>
-Classify the user_inbound as one of:
-- "continuing" — plausible answer to last_outbound, even if short (e.g. "Critical", "High", "yes", a name, a phrase).
-- "ambiguous"  — equally plausible as an answer or as a new unrelated request; genuinely cannot tell.
-- "off_topic"  — clearly unrelated to the task or last_outbound, including any request listed in constraints.
-
-Prefer "continuing" whenever the reply could reasonably be an answer. Apply on_out_of_scope for anything in constraints.
+  <rule classification="continuing">user_inbound is a plausible answer to last_outbound — even if short, terse, or in colloquial form (e.g. "Critical", "High", "yes", a name, a sentence). Prefer this classification whenever the reply could reasonably be an answer.</rule>
+  <rule classification="ambiguous">user_inbound is equally plausible as an answer or as a new unrelated request; genuinely cannot tell even after applying locale_context.</rule>
+  <rule classification="off_topic">user_inbound is clearly unrelated to the ongoing task or last_outbound, or matches any item in operational_contract constraints. Apply on_out_of_scope.</rule>
+  <tiebreak>When in doubt between "continuing" and "ambiguous", choose "continuing".</tiebreak>
 </classification_rules>
 
 <response_rules>
