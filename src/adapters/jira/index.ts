@@ -47,6 +47,11 @@ export class JiraAdapter implements PMAdapter {
     });
 
     const data = await response.json();
+    if (!response.ok) {
+      console.error('[Jira] Create issue failed:', response.status, JSON.stringify(data));
+      throw new Error(`Jira API error ${response.status}: ${data.errorMessages?.join(', ') ?? JSON.stringify(data.errors)}`);
+    }
+    console.log('[Jira] Issue created:', data.key);
     return { ...item, externalKey: data.key };
   }
 
