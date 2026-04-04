@@ -125,12 +125,16 @@ export async function callLLM({
     ? `{ "title": "...", "description": "...", "priority": "Low|Medium|High|Critical", "assigneeEmail": "email@example.com or null" }`
     : `{ "title": "...", "description": "...", "priority": "Low|Medium|High|Critical" }`;
 
+  const lastAssistantMsgNormal = conversationHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? null;
+
   const structuredSystem = `${systemPrompt}
 
-<classification_rules>
+${lastAssistantMsgNormal ? `<previous_question>\n${lastAssistantMsgNormal}\n</previous_question>\n` : ''}<classification_rules>
 - Use "pm.task_incomplete" when the user signals task intent. Ask only for the title first.
 - Use "pm.task_request" ONLY when you have collected ALL required fields in one shot from the user's message. Populate the "task" field.
-- Use "general_inquiry", "status_update", "complaint", or "out_of_scope" for everything else.
+- Use "out_of_scope" for any request Miyu cannot action: due date changes, ticket updates, roster lookups, assignee lists, or anything outside creating a new task or answering a general question. Explain briefly what Miyu can and cannot do.
+- If the previous_question was a confirmation and the user replied "yes", "ok", "sure", or similar, treat it as confirmation and proceed accordingly — do not ask for clarification.
+- Use "general_inquiry", "status_update", or "complaint" for everything else.
 </classification_rules>
 
 <output_format>
@@ -254,6 +258,7 @@ Use "ambiguous" only when truly split. Use "off_topic" only when clearly unrelat
 - If "continuing": extract the value for "${nextField}" exactly as the requestor stated it. ${afterExtraction}
 - If "ambiguous": ask "Just to confirm — are you still working on the task we were discussing, or is this something new?"
 - If "off_topic": acknowledge briefly that the task is being set aside.
+- You only collect these fields: title, description, priority${canAssignTickets ? ', assignee email' : ''}. Do NOT acknowledge, confirm, or act on requests for due dates, ticket updates, roster lookups, or any other operation — classify those as "off_topic" and note it is outside your current scope.
 - Always respond in plain text only — no markdown. This is ${platform}.
 </response_rules>
 
