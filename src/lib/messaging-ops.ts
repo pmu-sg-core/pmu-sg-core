@@ -70,7 +70,7 @@ export interface ConversationTurn {
   content: string;
 }
 
-// Fetch conversation history and gathering state for a sender
+// Fetch conversation history and gathering state for a sender (active record only)
 export async function getConversationState(senderId: string, channel: string): Promise<{
   history: ConversationTurn[];
   gatheringTask: boolean;
@@ -80,6 +80,7 @@ export async function getConversationState(senderId: string, channel: string): P
     .select('conversation_history, gathering_task')
     .eq('sender_id', senderId)
     .eq('channel', channel)
+    .eq('is_active', true)
     .single();
   return {
     history: (data?.conversation_history as ConversationTurn[]) ?? [],
@@ -87,7 +88,7 @@ export async function getConversationState(senderId: string, channel: string): P
   };
 }
 
-// Upsert conversation history and gathering state
+// Upsert conversation history and gathering state on the active record
 export async function updateConversationState(
   senderId: string,
   channel: string,
@@ -102,11 +103,38 @@ export async function updateConversationState(
     .upsert({
       sender_id: senderId,
       channel,
+      is_active: true,
       conversation_history: trimmed,
       gathering_task: gatheringTask,
       last_interaction_at: new Date().toISOString(),
       ...(pmIssueKey ? { last_pm_issue_key: pmIssueKey } : {}),
     }, { onConflict: 'sender_id,channel' });
+}
+
+// Retire the current active conversation and open a fresh one for an unrelated message.
+// The old record is marked inactive; retention rules handle eventual cleanup.
+export async function rotateConversationState(
+  senderId: string,
+  channel: string,
+  firstTurns: ConversationTurn[],
+): Promise<void> {
+  await supabase
+    .from('active_conversations')
+    .update({ is_active: false, last_interaction_at: new Date().toISOString() })
+    .eq('sender_id', senderId)
+    .eq('channel', channel)
+    .eq('is_active', true);
+
+  await supabase
+    .from('active_conversations')
+    .insert({
+      sender_id: senderId,
+      channel,
+      is_active: true,
+      conversation_history: firstTurns,
+      gathering_task: false,
+      last_interaction_at: new Date().toISOString(),
+    });
 }
 
 // Log AI interaction to ai_audit_trail

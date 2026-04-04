@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAgentGovernance, callLLM } from '@/lib/agent-config';
-import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
+import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
 import { routeWorkItem, checkCanAssign } from '@/adapters/router';
 
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
     const systemPrompt = `${config?.system_prompt ?? 'You are Miyu, a helpful AI assistant.'}
 The user is on the ${config?.plan_type ?? 'pilot'} plan. They may send up to ${limit} characters per message. Your replies are capped at ${maxOutput} tokens.
 Always respond in plain text only — no markdown, no bullet points, no asterisks, no headers. This is Microsoft Teams.
-${gatheringTask ? 'You are currently collecting task details from the user. Continue asking for the next missing field based on what has already been provided in the conversation.' : ''}`;
+${gatheringTask ? 'You have an active task collection in progress. First assess whether the user\'s latest message clearly continues that task. If yes, ask for the next missing field. If the intent is ambiguous or unclear, use pm.task_resume_pending and probe for confirmation before continuing.' : ''}`;
 
     const llmStart = Date.now();
     const { reply, classification, confidence, task } = await callLLM({
@@ -139,14 +139,20 @@ ${gatheringTask ? 'You are currently collecting task details from the user. Cont
 
     await sendTeamsReply(serviceUrl, conversationId, activityId, finalReply);
 
-    // Update conversation history (clear gathering state once ticket is created)
-    const updatedHistory = [
-      ...history,
+    // Update conversation history
+    const currentTurn = [
       { role: 'user' as const, content: incomingMsg },
       { role: 'assistant' as const, content: reply },
     ];
-    const stillGathering = classification === 'pm.task_incomplete';
-    updateConversationState(teamsUserId, 'teams', updatedHistory, stillGathering, pmIssueKey).catch(console.error);
+    const stillGathering = classification === 'pm.task_incomplete' || classification === 'pm.task_resume_pending';
+    const unrelated = gatheringTask && !stillGathering;
+    if (unrelated) {
+      // Retire the interrupted task conversation; open a fresh one for this new topic
+      rotateConversationState(teamsUserId, 'teams', currentTurn).catch(console.error);
+    } else {
+      const updatedHistory = [...history, ...currentTurn];
+      updateConversationState(teamsUserId, 'teams', updatedHistory, stillGathering, pmIssueKey).catch(console.error);
+    }
 
     // Log communication + audit trail (non-blocking)
     logCommunication({

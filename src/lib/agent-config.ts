@@ -106,7 +106,7 @@ export async function callLLM({
 IMPORTANT: Always respond with a valid JSON object in this exact format:
 {
   "reply": "<your plain text response to the user>",
-  "classification": "<one of: general_inquiry, pm.task_request, pm.task_incomplete, status_update, complaint, out_of_scope>",
+  "classification": "<one of: general_inquiry, pm.task_request, pm.task_incomplete, pm.task_resume_pending, status_update, complaint, out_of_scope>",
   "confidence": <a number between 0.0 and 1.0 indicating how confident you are in your reply>,
   "task": ${taskSchema}
 }
@@ -116,6 +116,7 @@ Do not include any text outside the JSON object.
 Classification rules for task routing:
 - Use "pm.task_request" ONLY when you have collected ALL required fields (see assignee rule below). Populate the "task" field with the collected values.
 - Use "pm.task_incomplete" when the user signals task intent but any required field is still missing. Ask ONLY for the next missing field — one question at a time, in this exact order: title → description → priority${canAssignTickets ? ' → assignee email' : ''}. Do NOT ask for due date, deadline, effort, or any other field.
+- Use "pm.task_resume_pending" when task collection is already active (gatheringTask) but the user's latest message is ambiguous — it is unclear whether they are continuing the task or doing something else. Ask them to confirm, e.g. "Just to confirm — are you still working on the task we were discussing, or is this something new?"
 - Accept whatever the user provides as the answer to each field, regardless of length, format, or style. Do not re-ask a field that has already been answered in the conversation history.
 - Never classify as "pm.task_request" if any required task field is still unknown.
 - Never create a ticket for vague, ambiguous, or incomplete task requests.
