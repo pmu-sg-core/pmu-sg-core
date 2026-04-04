@@ -98,6 +98,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
         nextField,
         canAssignTickets,
         platform: 'Microsoft Teams',
+        localeHints: config?.locale_hints,
       });
 
       reply = result.reply;
@@ -154,6 +155,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
         systemPrompt: baseSystemPrompt,
         conversationHistory: history,
         canAssignTickets,
+        localeHints: config?.locale_hints,
       });
 
       reply = result.reply;

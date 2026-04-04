@@ -72,3 +72,9 @@ SET can_assign_tickets = true
 FROM public.plan_tiers pt
 WHERE cs.plan_tier_id = pt.id
   AND pt.plan_type IN ('pro', 'corporate');
+
+-- Incremental: locale-aware language hints (default = Singlish for Singapore)
+-- Admins can override per tier. Set to NULL to disable locale context entirely.
+ALTER TABLE public.config_settings
+    ADD COLUMN IF NOT EXISTS locale_hints TEXT DEFAULT
+        'Users may write in Singlish (Singapore colloquial English). Treat sentence-final particles — "lah", "leh", "lor", "ah", "sia", "what", "mah", "hor", "can", "ok can" — as filler with no semantic content; strip them before classifying intent or extracting field values. Short or grammatically incomplete replies are normal and valid answers. Priority mapping: "urgent" / "very urgent" → High; "super urgent" / "ASAP" / "must do now" → Critical; "not urgent" / "low priority" / "can wait" → Low; anything else → Medium.';

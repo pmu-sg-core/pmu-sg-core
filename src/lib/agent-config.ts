@@ -14,6 +14,7 @@ interface ConfigSettings {
   prompt_id: string;
   can_access_kb: boolean;
   enable_history: boolean;
+  locale_hints: string | null;
 }
 
 interface SubscriptionRow {
@@ -25,6 +26,7 @@ interface SubscriptionRow {
 export interface AgentGovernance extends ConfigSettings {
   plan_type: string;
   can_assign_tickets: boolean;
+  locale_hints: string | null;
 }
 
 export async function getAgentGovernance(
@@ -47,7 +49,8 @@ export async function getAgentGovernance(
           system_prompt,
           prompt_id,
           can_access_kb,
-          enable_history
+          enable_history,
+          locale_hints
         )
       )
     `)
@@ -164,6 +167,13 @@ function normalModeIntentHint(lastOutbound: string | null): string {
   return 'Follow-up reply in ongoing conversation.';
 }
 
+/** <locale_context> — region-specific language guidance injected when configured.
+ *  Tells the model how to interpret dialect, particles, and colloquial phrasing. */
+function buildLocaleContext(hints: string | null | undefined): string {
+  if (!hints) return '';
+  return `<locale_context>\n${hints}\n</locale_context>`;
+}
+
 /** <operational_contract> — hard capability boundary + failure protocol.
  *  Prevents capability hallucination and defines the pivot on out-of-scope requests. */
 function buildOperationalContract(capabilities: string, constraints: string, onOutOfScope: string): string {
@@ -205,6 +215,7 @@ export async function callLLM({
   systemPrompt,
   conversationHistory = [],
   canAssignTickets = false,
+  localeHints,
 }: {
   provider: string;
   model: string;
@@ -214,11 +225,14 @@ export async function callLLM({
   systemPrompt: string;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   canAssignTickets?: boolean;
+  localeHints?: string | null;
 }): Promise<LLMResult> {
   const recentHistory = conversationHistory.slice(-HISTORY_WINDOW);
   const lastOutbound = recentHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? null;
 
   const structuredSystem = `${systemPrompt}
+
+${buildLocaleContext(localeHints)}
 
 ${buildInteractionAnchor(lastOutbound, text, normalModeIntentHint(lastOutbound))}
 
@@ -306,6 +320,7 @@ export async function callLLMGathering({
   nextField,
   canAssignTickets,
   platform,
+  localeHints,
 }: {
   provider: string;
   model: string;
@@ -318,6 +333,7 @@ export async function callLLMGathering({
   nextField: keyof TaskFieldsState;
   canAssignTickets: boolean;
   platform: 'WhatsApp' | 'Microsoft Teams';
+  localeHints?: string | null;
 }): Promise<GatheringResult> {
   const recentHistory = conversationHistory.slice(-HISTORY_WINDOW);
   const lastOutbound = recentHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? '(none)';
@@ -329,6 +345,8 @@ export async function callLLMGathering({
     : `All required fields will then be complete — reply with a brief confirmation that you have everything and will create the ticket now. Do not mention a ticket number yet.`;
 
   const gatheringSystem = `${systemPrompt}
+
+${buildLocaleContext(localeHints)}
 
 ${buildSessionState(taskFields, nextField, canAssignTickets)}
 
@@ -342,7 +360,7 @@ ${buildOperationalContract(
 
 <classification_rules>
 Classify the user_inbound as one of:
-- "continuing" — plausible answer to last_outbound, even if short (e.g. "Critical", "High", "yes", a name).
+- "continuing" — plausible answer to last_outbound, even if short (e.g. "Critical", "High", "yes", a name, a phrase).
 - "ambiguous"  — equally plausible as an answer or as a new unrelated request; genuinely cannot tell.
 - "off_topic"  — clearly unrelated to the task or last_outbound, including any request listed in constraints.
 
@@ -350,7 +368,7 @@ Prefer "continuing" whenever the reply could reasonably be an answer. Apply on_o
 </classification_rules>
 
 <response_rules>
-- If "continuing": extract the value for "${nextField}" verbatim from user_inbound. Accept it as-is — do NOT rephrase, reformat, suggest alternatives, or ask any follow-up question about this field. ${afterExtraction}
+- If "continuing": extract the value for "${nextField}" verbatim from user_inbound. Do NOT rephrase, reformat, suggest alternatives, or ask any follow-up question about this field. ${afterExtraction}
 - If "ambiguous": ask "Just to confirm — are you still working on the task we were discussing, or is this something new?"
 - If "off_topic": follow the on_out_of_scope protocol.
 - Always respond in plain text only — no markdown. This is ${platform}.
