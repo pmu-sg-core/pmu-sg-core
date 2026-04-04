@@ -127,7 +127,14 @@ export async function callLLM({
 
   const structuredSystem = `${systemPrompt}
 
-IMPORTANT: Always respond with a valid JSON object in this exact format:
+<classification_rules>
+- Use "pm.task_incomplete" when the user signals task intent. Ask only for the title first.
+- Use "pm.task_request" ONLY when you have collected ALL required fields in one shot from the user's message. Populate the "task" field.
+- Use "general_inquiry", "status_update", "complaint", or "out_of_scope" for everything else.
+</classification_rules>
+
+<output_format>
+Always respond with a valid JSON object in this exact format:
 {
   "reply": "<your plain text response to the user>",
   "classification": "<one of: general_inquiry, pm.task_request, pm.task_incomplete, status_update, complaint, out_of_scope>",
@@ -136,11 +143,7 @@ IMPORTANT: Always respond with a valid JSON object in this exact format:
 }
 The "task" field is REQUIRED when classification is "pm.task_request". Omit it for all other classifications.
 Do not include any text outside the JSON object.
-
-Classification rules:
-- Use "pm.task_incomplete" when the user signals task intent. Ask only for the title first.
-- Use "pm.task_request" ONLY when you have collected ALL required fields in one shot from the user's message. Populate the "task" field.
-- Use "general_inquiry", "status_update", "complaint", or "out_of_scope" for everything else.`;
+</output_format>`;
 
   if (provider === 'anthropic') {
     const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
@@ -225,36 +228,44 @@ export async function callLLMGathering({
 
   const gatheringSystem = `${systemPrompt}
 
-You are collecting task details one field at a time. Current state:
+<task_state>
 ${stateLines}
+</task_state>
 
-Your last message to the requestor was:
-"${lastAssistantMsg}"
+<previous_question>
+${lastAssistantMsg}
+</previous_question>
 
-The requestor just replied:
-"${text}"
+<user_reply>
+${text}
+</user_reply>
 
-Decide:
-(a) "continuing" — their reply is a plausible answer to your last question, even if short (e.g. "Critical", "High", "John", "yes").
-(b) "ambiguous" — you genuinely cannot tell if they are answering your question or starting something new entirely.
-(c) "off_topic" — their reply has no plausible connection to the task or your last question.
+<classification_rules>
+Classify the user_reply as one of:
+- "continuing" — plausible answer to the previous_question, even if short (e.g. "Critical", "High", "John", "yes").
+- "ambiguous"  — equally plausible as an answer or as a new unrelated request; you genuinely cannot tell.
+- "off_topic"  — clearly has no connection to the task or the previous_question.
 
-Rules:
-- Default to "continuing" whenever the reply could reasonably be an answer to what you just asked.
-- Use "ambiguous" only when the reply is equally plausible as a new request and as an answer.
-- Use "off_topic" only when the reply clearly has nothing to do with the task.
+Defaults: prefer "continuing" whenever the reply could reasonably be an answer.
+Use "ambiguous" only when truly split. Use "off_topic" only when clearly unrelated.
+</classification_rules>
+
+<response_rules>
 - If "continuing": extract the value for "${nextField}" exactly as the requestor stated it. ${afterExtraction}
 - If "ambiguous": ask "Just to confirm — are you still working on the task we were discussing, or is this something new?"
 - If "off_topic": acknowledge briefly that the task is being set aside.
 - Always respond in plain text only — no markdown. This is ${platform}.
+</response_rules>
 
+<output_format>
 Respond with this JSON and nothing else:
 {
   "reply": "<your plain text response>",
   "classification": "continuing" | "ambiguous" | "off_topic",
   "extracted": { "${nextField}": "<value>" }
 }
-Omit "extracted" when classification is not "continuing".`;
+Omit "extracted" when classification is not "continuing".
+</output_format>`;
 
   if (provider === 'anthropic') {
     const msg = await anthropic.messages.create({
