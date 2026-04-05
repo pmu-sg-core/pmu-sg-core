@@ -184,6 +184,8 @@ async function processReadyIntents(
 function buildIntentsFromDecomposition(
   decomposed: DecomposedIntent[],
   canAssignTickets: boolean,
+  siteProjectId: string | null,
+  userMessage: string,
 ): PendingIntent[] {
   return decomposed.map(d => {
     const intent = createIntent(d.type);
@@ -205,6 +207,19 @@ function buildIntentsFromDecomposition(
     if (d.type === 'pm.task_create') {
       // Needs gathering — stays as 'gathering'
       return intent;
+    }
+
+    if (d.type === 'bca.site_diary_create') {
+      // Auto-populate from governance — no user gathering needed
+      return {
+        ...intent,
+        status: 'ready' as const,
+        fields: {
+          siteProjectId: siteProjectId ?? '',
+          reportDate: new Date().toISOString().slice(0, 10),
+          transcript: userMessage,
+        },
+      };
     }
 
     // general_inquiry / out_of_scope / etc — no execution needed, mark complete immediately
@@ -230,6 +245,7 @@ export async function runAgentLoop(params: {
   localeHints?: string | null;
   canAssignTickets: boolean;
   canAccessBca: boolean;
+  siteProjectId: string | null;
   platform: 'WhatsApp' | 'Microsoft Teams';
   sourceMessageId?: string;
   actorId?: string;
@@ -238,7 +254,7 @@ export async function runAgentLoop(params: {
     userMessage, history, pendingIntents, activeIntentIdx,
     gatheringTask, taskFields, lastPmIssueKey,
     provider, model, maxTokens, temperature, systemPrompt, localeHints,
-    canAssignTickets, canAccessBca, platform, sourceMessageId, actorId,
+    canAssignTickets, canAccessBca, siteProjectId, platform, sourceMessageId, actorId,
   } = params;
 
   const execParams = { lastPmIssueKey, sourceMessageId, actorId, canAssignTickets };
@@ -313,7 +329,7 @@ export async function runAgentLoop(params: {
     conversationHistory: history, canAssignTickets, canAccessBca, localeHints,
   });
 
-  const newIntents = buildIntentsFromDecomposition(decomposeResult.intents, canAssignTickets);
+  const newIntents = buildIntentsFromDecomposition(decomposeResult.intents, canAssignTickets, siteProjectId, userMessage);
 
   // Append new intents after any still-pending ones
   const existingPending = pendingIntents.filter(i => i.status !== 'complete' && i.status !== 'failed');

@@ -53,10 +53,8 @@ export async function getAgentGovernance(
           locale_hints
         )
       ),
-      subscriber (
-        sector_tags,
-        site_projects ( id )
-      )
+      subscriber ( sector_tags ),
+      site_projects ( id )
     `)
     .eq(column, identity)
     .single();
@@ -64,7 +62,8 @@ export async function getAgentGovernance(
   if (error || !data) return null;
 
   const row = data as unknown as SubscriptionRow & {
-    subscriber?: { sector_tags: string[] | null; site_projects?: { id: string }[] } | null;
+    subscriber?: { sector_tags: string[] | null } | null;
+    site_projects?: { id: string }[] | null;
   };
   const tier = Array.isArray(row.plan_tiers) ? row.plan_tiers[0] : row.plan_tiers;
   const rawConfig = tier?.config_settings;
@@ -75,7 +74,7 @@ export async function getAgentGovernance(
   if (!config) return null;
 
   const sectorTags = row.subscriber?.sector_tags ?? [];
-  const siteProjects = row.subscriber?.site_projects ?? [];
+  const siteProjects = row.site_projects ?? [];
 
   return {
     ...config,
