@@ -1,9 +1,7 @@
 // Single source of truth for all prompt envelope builders.
 // agent-config.ts (orchestration) and future react-loop/index.ts import from here.
 
-import type { TaskFieldsState } from '@/lib/agent-config';
-
-const FIELD_ORDER: (keyof TaskFieldsState)[] = ['title', 'description', 'priority', 'assigneeEmail'];
+import { type TaskFieldsState, FIELD_ORDER } from '@/adapters/pmtool/types';
 
 // ── Envelope builders ─────────────────────────────────────────────────────────
 

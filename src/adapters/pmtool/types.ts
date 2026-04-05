@@ -1,3 +1,41 @@
+// PM domain types: task field collection state + canonical work item representation.
+// Imported by prompt-store, orchestration, and PM adapters alike — no circular deps.
+
+// ── Task field collection (gathering phase) ───────────────────────────────────
+
+export interface TaskFieldsState {
+  title?: string;
+  description?: string;
+  priority?: 'Low' | 'Medium' | 'High' | 'Critical';
+  assigneeEmail?: string;
+}
+
+export interface TaskFields {
+  title: string;
+  description: string;
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  assigneeEmail?: string;
+}
+
+export const FIELD_ORDER: (keyof TaskFieldsState)[] = ['title', 'description', 'priority', 'assigneeEmail'];
+
+export const FIELD_LABELS: Record<keyof TaskFieldsState, string> = {
+  title: 'title (a short label for the task)',
+  description: 'description (what needs to be done and why)',
+  priority: 'priority — reply with one of: Low, Medium, High, Critical',
+  assigneeEmail: 'assignee email address (or say "unassigned")',
+};
+
+export function getNextField(
+  fields: TaskFieldsState,
+  canAssignTickets: boolean,
+): keyof TaskFieldsState | null {
+  const active = canAssignTickets ? FIELD_ORDER : FIELD_ORDER.slice(0, 3);
+  return active.find(f => !fields[f]) ?? null;
+}
+
+// ── Canonical work item (execution phase) ─────────────────────────────────────
+
 // The canonical internal representation of a work item.
 // All PM tool adapters translate to/from this format.
 
