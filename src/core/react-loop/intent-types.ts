@@ -6,10 +6,11 @@ import type { TaskFieldsState } from '@/adapters/pmtool/types';
 export type IntentType =
   | 'pm.task_create'
   | 'pm.task_query'
-  | 'pm.task_update'
+  | 'pm.task_assign'
   | 'general_inquiry'
   | 'status_update'
-  | 'complaint';
+  | 'complaint'
+  | 'out_of_scope';
 
 export type IntentStatus =
   | 'gathering'    // actively collecting fields from user

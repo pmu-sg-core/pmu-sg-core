@@ -6,6 +6,7 @@ import {
   FIELD_LABELS,
   getNextField,
 } from '@/adapters/pmtool/types';
+import type { IntentType } from '@/core/react-loop/intent-types';
 import {
   buildSessionState,
   buildInteractionAnchor,
@@ -275,5 +276,132 @@ ${buildOperationalContract(
   } catch (e) {
     console.error('[callLLMGathering] API error:', e);
     return { reply: 'Got it.', classification: 'continuing', extracted: { [nextField]: text } as Partial<TaskFieldsState> };
+  }
+}
+
+// ── Decompose-mode LLM (multi-intent extraction) ─────────────────────────────
+
+export interface DecomposedIntent {
+  type: IntentType;
+  issueKey?: string;       // for pm.task_query / pm.task_assign
+  assigneeEmail?: string;  // for pm.task_assign
+  task?: Partial<TaskFields>; // for pm.task_create when all fields provided upfront
+}
+
+export interface DecomposeResult {
+  reply: string;
+  confidence: number;
+  intents: DecomposedIntent[];
+}
+
+export async function callLLMDecompose({
+  provider,
+  model,
+  text,
+  maxTokens,
+  temperature,
+  systemPrompt,
+  conversationHistory = [],
+  canAssignTickets = false,
+  localeHints,
+}: {
+  provider: string;
+  model: string;
+  text: string;
+  maxTokens: number;
+  temperature: number;
+  systemPrompt: string;
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  canAssignTickets?: boolean;
+  localeHints?: string | null;
+}): Promise<DecomposeResult> {
+  const recentHistory = conversationHistory.slice(-HISTORY_WINDOW);
+  const lastOutbound = recentHistory.filter(t => t.role === 'assistant').at(-1)?.content ?? null;
+
+  const decomposeSystem = `${systemPrompt}
+
+${buildLocaleContext(localeHints)}
+
+${buildInteractionAnchor(lastOutbound, text, normalModeIntentHint(lastOutbound))}
+
+${buildOperationalContract(
+    [
+      `Create new tasks by collecting: title, description, priority${canAssignTickets ? ', assignee email' : ''}.`,
+      `Check the status of an existing task by issue key.`,
+      ...(canAssignTickets ? [`Reassign an existing task to a team member by issue key and email.`] : []),
+      `Answer general questions about pmu.sg and its features.`,
+    ],
+    [
+      `Cannot set due dates, delete tickets, look up rosters, or list available assignees.`,
+      ...(!canAssignTickets ? [`Cannot reassign tasks — this requires a higher plan tier.`] : []),
+    ],
+    `Include an intent of type "out_of_scope" for any unsupported request. Politely decline in the reply.`
+  )}
+
+<decomposition_rules>
+  <rule>Identify every distinct intent in the user message. A single message may contain multiple intents (e.g. "create a task AND check KAN-3").</rule>
+  <rule>For each intent, set the type and extract any available fields (issueKey, assigneeEmail, task fields).</rule>
+  <rule>For pm.task_create: populate the task object only if title, description, and priority are ALL present in the message. Otherwise leave task empty — fields will be gathered conversationally.</rule>
+  <rule>Order intents as they appear in the message. The first intent drives the opening reply.</rule>
+  <rule>The reply should acknowledge all intents briefly and address the first one — e.g. "Sure! I'll create that task and check KAN-3 after. First, what's the title?"</rule>
+</decomposition_rules>`;
+
+  const taskProperties: Record<string, unknown> = {
+    title:       { type: 'string' },
+    description: { type: 'string' },
+    priority:    { type: 'string', enum: ['Low', 'Medium', 'High', 'Critical'] },
+    ...(canAssignTickets ? { assigneeEmail: { type: ['string', 'null'] } } : {}),
+  };
+
+  try {
+    const input = await getLLMAdapter(provider).call({
+      model,
+      systemPrompt: decomposeSystem,
+      messages: [...recentHistory, { role: 'user', content: text }],
+      tools: [{
+        name: 'decompose_intents',
+        description: 'Identify all intents in the user message and extract available fields for each.',
+        input_schema: {
+          type: 'object' as const,
+          properties: {
+            reply:      { type: 'string', description: 'Plain text opening reply acknowledging all intents.' },
+            confidence: { type: 'number', description: 'Confidence score 0.0–1.0' },
+            intents: {
+              type: 'array',
+              description: 'All intents found in the message, in order.',
+              items: {
+                type: 'object',
+                properties: {
+                  type:          { type: 'string', enum: ['pm.task_create', 'pm.task_query', 'pm.task_assign', 'general_inquiry', 'status_update', 'complaint', 'out_of_scope'] },
+                  issueKey:      { type: 'string' },
+                  assigneeEmail: { type: 'string' },
+                  task: {
+                    type: 'object',
+                    description: 'Populate only when ALL required task fields are present in the message.',
+                    properties: taskProperties,
+                    required: ['title', 'description', 'priority'],
+                  },
+                },
+                required: ['type'],
+              },
+            },
+          },
+          required: ['reply', 'confidence', 'intents'],
+        },
+      }],
+      toolName: 'decompose_intents',
+      maxTokens,
+      temperature,
+    });
+
+    const rawIntents = (input.intents as DecomposedIntent[]) ?? [];
+    return {
+      reply:      (input.reply as string)      ?? "I'm on it.",
+      confidence: (input.confidence as number) ?? 0.5,
+      intents:    rawIntents.length > 0 ? rawIntents : [{ type: 'general_inquiry' }],
+    };
+  } catch (e) {
+    console.error('[callLLMDecompose] API error:', e);
+    return { reply: "I'm sorry, something went wrong. Please try again.", confidence: 0, intents: [{ type: 'general_inquiry' }] };
   }
 }

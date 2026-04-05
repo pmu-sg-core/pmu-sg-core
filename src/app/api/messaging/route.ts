@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getAgentGovernance, callLLM, callLLMGathering, getNextField } from '@/lib/agent-config';
-import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationStateFromGathering, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
+import { getAgentGovernance } from '@/lib/agent-config';
+import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
-import { routeWorkItem, checkCanAssign, getWorkItemByKey, reassignWorkItem } from '@/adapters/router';
+import { checkCanAssign } from '@/adapters/router';
 import { WhatsAppAdapter } from '@/adapters/messenger/whatsapp';
+import { runAgentLoop } from '@/core/react-loop';
 
 const messenger = new WhatsAppAdapter();
 
@@ -76,155 +77,28 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
 
     const llmStart = Date.now();
 
-    let reply: string;
-    let classification: string;
-    let confidence: number = 1.0;
-    let pmIssueKey: string | undefined;
-    let updatedTaskFields = { ...taskFields };
-    let stillGathering = false;
+    const loopResult = await runAgentLoop({
+      userMessage: incomingMsg,
+      history,
+      pendingIntents,
+      activeIntentIdx,
+      gatheringTask,
+      taskFields,
+      lastPmIssueKey,
+      provider: config?.model_provider ?? 'anthropic',
+      model: config?.model_name ?? 'claude-sonnet-4-6',
+      maxTokens: maxOutput,
+      temperature: config?.temperature ?? 0.7,
+      systemPrompt: baseSystemPrompt,
+      localeHints: config?.locale_hints,
+      canAssignTickets,
+      platform: 'WhatsApp',
+      sourceMessageId: messageSid,
+      actorId: senderPhone,
+    });
 
-    const nextField = getNextField(taskFields, canAssignTickets);
-
-    if (gatheringTask && nextField) {
-      // ── Gathering mode: focused extraction ──────────────────────────────────
-      const result = await callLLMGathering({
-        provider: config?.model_provider ?? 'anthropic',
-        model: config?.model_name ?? 'claude-sonnet-4-6',
-        text: incomingMsg,
-        maxTokens: maxOutput,
-        temperature: config?.temperature ?? 0.7,
-        systemPrompt: baseSystemPrompt,
-        conversationHistory: history,
-        taskFields,
-        nextField,
-        canAssignTickets,
-        platform: 'WhatsApp',
-        localeHints: config?.locale_hints,
-      });
-
-      reply = result.reply;
-      classification = result.classification;
-
-      if (result.classification === 'off_topic') {
-        // Retire current task conversation; open fresh one
-        const currentTurn = [
-          { role: 'user' as const, content: incomingMsg },
-          { role: 'assistant' as const, content: reply },
-        ];
-        rotateConversationState(senderPhone, 'whatsapp', currentTurn).catch(console.error);
-        await messenger.send(sender, truncateAtSentence(reply, 1500));
-        logPost({ intakeLogId, senderPhone, messageSid, incomingMsg, reply, classification, confidence, config, processingTimeMs: Date.now() - llmStart });
-        return xmlOk();
-      }
-
-      if (result.classification === 'ambiguous') {
-        stillGathering = true;
-      } else {
-        // continuing — merge extracted field
-        updatedTaskFields = { ...taskFields, ...result.extracted };
-        const newNextField = getNextField(updatedTaskFields, canAssignTickets);
-
-        if (!newNextField) {
-          // All fields collected — create ticket
-          classification = 'pm.task_request';
-          try {
-            const workItem = await routeWorkItem({
-              title: updatedTaskFields.title!,
-              description: updatedTaskFields.description!,
-              priority: updatedTaskFields.priority!,
-              assigneeEmail: updatedTaskFields.assigneeEmail ?? undefined,
-              category: 'pm.task_request',
-              sourceMessageId: messageSid,
-              actorPhone: senderPhone,
-            });
-            pmIssueKey = workItem?.externalKey;
-          } catch (e) {
-            console.error('[WhatsApp] routeWorkItem failed:', e);
-          }
-          stillGathering = false;
-        } else {
-          stillGathering = true;
-        }
-      }
-    } else {
-      // ── Normal mode: intent classification ──────────────────────────────────
-      const result = await callLLM({
-        provider: config?.model_provider ?? 'anthropic',
-        model: config?.model_name ?? 'claude-sonnet-4-6',
-        text: incomingMsg,
-        maxTokens: maxOutput,
-        temperature: config?.temperature ?? 0.7,
-        systemPrompt: baseSystemPrompt,
-        conversationHistory: history,
-        canAssignTickets,
-        localeHints: config?.locale_hints,
-      });
-
-      reply = result.reply;
-      classification = result.classification;
-      confidence = result.confidence;
-
-      if (classification === 'pm.task_request' && result.task) {
-        // All fields provided in one shot
-        try {
-          const workItem = await routeWorkItem({
-            title: result.task.title,
-            description: result.task.description,
-            priority: result.task.priority,
-            assigneeEmail: result.task.assigneeEmail ?? undefined,
-            category: classification,
-            sourceMessageId: messageSid,
-            actorPhone: senderPhone,
-          });
-          pmIssueKey = workItem?.externalKey;
-        } catch (e) {
-          console.error('[WhatsApp] routeWorkItem failed:', e);
-        }
-        stillGathering = false;
-
-      } else if (classification === 'pm.task_query') {
-        const key = result.issueKey ?? lastPmIssueKey ?? null;
-        if (!key) {
-          reply = "Which ticket would you like me to check? Please share the issue key (e.g. KAN-3).";
-        } else {
-          try {
-            const item = await getWorkItemByKey(key);
-            reply = item
-              ? `${item.externalKey}: ${item.title}\nStatus: ${item.status ?? 'Unknown'}\nPriority: ${item.priority}`
-              : `I couldn't find ticket ${key}. Please check the issue key and try again.`;
-          } catch (e) {
-            console.error('[WhatsApp] getWorkItemByKey failed:', e);
-            reply = "Something went wrong fetching that ticket. Please try again.";
-          }
-        }
-        stillGathering = false;
-
-      } else if (classification === 'pm.task_assign' && canAssignTickets) {
-        const key = result.issueKey ?? lastPmIssueKey ?? null;
-        const email = result.assigneeEmail ?? null;
-        if (!key || !email) {
-          reply = !key
-            ? "Which ticket would you like to reassign? Please share the issue key."
-            : "Who should I assign it to? Please share their email address.";
-          stillGathering = false;
-        } else {
-          try {
-            const item = await reassignWorkItem(key, email);
-            reply = item
-              ? `Done. ${item.externalKey} has been assigned to ${email}.`
-              : `I couldn't reassign ${key}. Please check the issue key and email, then try again.`;
-            pmIssueKey = item?.externalKey;
-          } catch (e) {
-            console.error('[WhatsApp] reassignWorkItem failed:', e);
-            reply = "Something went wrong with the reassignment. Please try again.";
-          }
-          stillGathering = false;
-        }
-
-      } else {
-        stillGathering = classification === 'pm.task_incomplete';
-      }
-    }
+    const { reply, classification, confidence, pmIssueKey, shouldRotate,
+      updatedPendingIntents, updatedActiveIntentIdx } = loopResult;
 
     const processingTimeMs = Date.now() - llmStart;
 
@@ -234,6 +108,17 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
       ? `${baseReply}\n\nTicket ${pmIssueKey} has been raised. The team will pick it up shortly.`
       : baseReply;
 
+    if (shouldRotate) {
+      const currentTurn = [
+        { role: 'user' as const, content: incomingMsg },
+        { role: 'assistant' as const, content: reply },
+      ];
+      rotateConversationState(senderPhone, 'whatsapp', currentTurn).catch(console.error);
+      await messenger.send(sender, truncateAtSentence(reply, 1500));
+      logPost({ intakeLogId, senderPhone, messageSid, incomingMsg, reply, classification, confidence, config, processingTimeMs });
+      return xmlOk();
+    }
+
     await messenger.send(sender, finalReply);
 
     // Stage 6: Persist state
@@ -242,7 +127,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
       { role: 'user' as const, content: incomingMsg },
       { role: 'assistant' as const, content: reply },
     ];
-    updateConversationStateFromGathering(senderPhone, 'whatsapp', updatedHistory, pendingIntents, activeIntentIdx, stillGathering, updatedTaskFields, pmIssueKey).catch(console.error);
+    updateConversationState(senderPhone, 'whatsapp', updatedHistory, updatedPendingIntents, updatedActiveIntentIdx, pmIssueKey).catch(console.error);
 
     // Audit (non-blocking)
     logPost({ intakeLogId, senderPhone, messageSid, incomingMsg, reply: finalReply, classification, confidence, config, processingTimeMs, pmIssueKey });

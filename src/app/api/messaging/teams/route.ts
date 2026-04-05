@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getAgentGovernance, callLLM, callLLMGathering, getNextField } from '@/lib/agent-config';
-import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationStateFromGathering, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
+import { getAgentGovernance } from '@/lib/agent-config';
+import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
-import { routeWorkItem, checkCanAssign, getWorkItemByKey, reassignWorkItem } from '@/adapters/router';
+import { checkCanAssign } from '@/adapters/router';
 import { TeamsAdapter } from '@/adapters/messenger/teams';
+import { runAgentLoop } from '@/core/react-loop';
 
 const messenger = new TeamsAdapter();
 
@@ -75,153 +76,28 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
 
     const llmStart = Date.now();
 
-    let reply: string;
-    let classification: string;
-    let confidence: number = 1.0;
-    let pmIssueKey: string | undefined;
-    let updatedTaskFields = { ...taskFields };
-    let stillGathering = false;
+    const loopResult = await runAgentLoop({
+      userMessage: incomingMsg,
+      history,
+      pendingIntents,
+      activeIntentIdx,
+      gatheringTask,
+      taskFields,
+      lastPmIssueKey,
+      provider: config?.model_provider ?? 'anthropic',
+      model: config?.model_name ?? 'claude-sonnet-4-6',
+      maxTokens: maxOutput,
+      temperature: config?.temperature ?? 0.7,
+      systemPrompt: baseSystemPrompt,
+      localeHints: config?.locale_hints,
+      canAssignTickets,
+      platform: 'Microsoft Teams',
+      sourceMessageId: activityId,
+      actorId: teamsUserId,
+    });
 
-    const nextField = getNextField(taskFields, canAssignTickets);
-
-    if (gatheringTask && nextField) {
-      // ── Gathering mode: focused extraction ──────────────────────────────────
-      const result = await callLLMGathering({
-        provider: config?.model_provider ?? 'anthropic',
-        model: config?.model_name ?? 'claude-sonnet-4-6',
-        text: incomingMsg,
-        maxTokens: maxOutput,
-        temperature: config?.temperature ?? 0.7,
-        systemPrompt: baseSystemPrompt,
-        conversationHistory: history,
-        taskFields,
-        nextField,
-        canAssignTickets,
-        platform: 'Microsoft Teams',
-        localeHints: config?.locale_hints,
-      });
-
-      reply = result.reply;
-      classification = result.classification;
-
-      if (result.classification === 'off_topic') {
-        const currentTurn = [
-          { role: 'user' as const, content: incomingMsg },
-          { role: 'assistant' as const, content: reply },
-        ];
-        rotateConversationState(teamsUserId, 'teams', currentTurn).catch(console.error);
-        await messenger.send(teamsUserId, truncateAtSentence(reply, 1500), { serviceUrl, conversationId, activityId });
-        logPost({ intakeLogId, senderId: teamsUserId, activityId, incomingMsg, reply, classification, confidence, config, processingTimeMs: Date.now() - llmStart });
-        return new NextResponse('OK', { status: 200 });
-      }
-
-      if (result.classification === 'ambiguous') {
-        stillGathering = true;
-      } else {
-        // continuing — merge extracted field
-        updatedTaskFields = { ...taskFields, ...result.extracted };
-        const newNextField = getNextField(updatedTaskFields, canAssignTickets);
-
-        if (!newNextField) {
-          // All fields collected — create ticket
-          classification = 'pm.task_request';
-          try {
-            const workItem = await routeWorkItem({
-              title: updatedTaskFields.title!,
-              description: updatedTaskFields.description!,
-              priority: updatedTaskFields.priority!,
-              assigneeEmail: updatedTaskFields.assigneeEmail ?? undefined,
-              category: 'pm.task_request',
-              sourceMessageId: activityId,
-              actorPhone: teamsUserId,
-            });
-            pmIssueKey = workItem?.externalKey;
-          } catch (e) {
-            console.error('[Teams] routeWorkItem failed:', e);
-          }
-          stillGathering = false;
-        } else {
-          stillGathering = true;
-        }
-      }
-    } else {
-      // ── Normal mode: intent classification ──────────────────────────────────
-      const result = await callLLM({
-        provider: config?.model_provider ?? 'anthropic',
-        model: config?.model_name ?? 'claude-sonnet-4-6',
-        text: incomingMsg,
-        maxTokens: maxOutput,
-        temperature: config?.temperature ?? 0.7,
-        systemPrompt: baseSystemPrompt,
-        conversationHistory: history,
-        canAssignTickets,
-        localeHints: config?.locale_hints,
-      });
-
-      reply = result.reply;
-      classification = result.classification;
-      confidence = result.confidence;
-
-      if (classification === 'pm.task_request' && result.task) {
-        try {
-          const workItem = await routeWorkItem({
-            title: result.task.title,
-            description: result.task.description,
-            priority: result.task.priority,
-            assigneeEmail: result.task.assigneeEmail ?? undefined,
-            category: classification,
-            sourceMessageId: activityId,
-            actorPhone: teamsUserId,
-          });
-          pmIssueKey = workItem?.externalKey;
-        } catch (e) {
-          console.error('[Teams] routeWorkItem failed:', e);
-        }
-        stillGathering = false;
-
-      } else if (classification === 'pm.task_query') {
-        const key = result.issueKey ?? lastPmIssueKey ?? null;
-        if (!key) {
-          reply = "Which ticket would you like me to check? Please share the issue key (e.g. KAN-3).";
-        } else {
-          try {
-            const item = await getWorkItemByKey(key);
-            reply = item
-              ? `${item.externalKey}: ${item.title}\nStatus: ${item.status ?? 'Unknown'}\nPriority: ${item.priority}`
-              : `I couldn't find ticket ${key}. Please check the issue key and try again.`;
-          } catch (e) {
-            console.error('[Teams] getWorkItemByKey failed:', e);
-            reply = "Something went wrong fetching that ticket. Please try again.";
-          }
-        }
-        stillGathering = false;
-
-      } else if (classification === 'pm.task_assign' && canAssignTickets) {
-        const key = result.issueKey ?? lastPmIssueKey ?? null;
-        const email = result.assigneeEmail ?? null;
-        if (!key || !email) {
-          reply = !key
-            ? "Which ticket would you like to reassign? Please share the issue key."
-            : "Who should I assign it to? Please share their email address.";
-          stillGathering = false;
-        } else {
-          try {
-            const item = await reassignWorkItem(key, email);
-            reply = item
-              ? `Done. ${item.externalKey} has been assigned to ${email}.`
-              : `I couldn't reassign ${key}. Please check the issue key and email, then try again.`;
-            pmIssueKey = item?.externalKey;
-          } catch (e) {
-            console.error('[Teams] reassignWorkItem failed:', e);
-            reply = "Something went wrong with the reassignment. Please try again.";
-          }
-          stillGathering = false;
-        }
-
-      } else {
-        stillGathering = classification === 'pm.task_incomplete';
-      }
-    }
+    const { reply, classification, confidence, pmIssueKey, shouldRotate,
+      updatedPendingIntents, updatedActiveIntentIdx } = loopResult;
 
     const processingTimeMs = Date.now() - llmStart;
 
@@ -231,6 +107,17 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
       ? `${baseReply}\n\nTicket ${pmIssueKey} has been raised. The team will pick it up shortly.`
       : baseReply;
 
+    if (shouldRotate) {
+      const currentTurn = [
+        { role: 'user' as const, content: incomingMsg },
+        { role: 'assistant' as const, content: reply },
+      ];
+      rotateConversationState(teamsUserId, 'teams', currentTurn).catch(console.error);
+      await messenger.send(teamsUserId, truncateAtSentence(reply, 1500), { serviceUrl, conversationId, activityId });
+      logPost({ intakeLogId, senderId: teamsUserId, activityId, incomingMsg, reply, classification, confidence, config, processingTimeMs });
+      return new NextResponse('OK', { status: 200 });
+    }
+
     await messenger.send(teamsUserId, finalReply, { serviceUrl, conversationId, activityId });
 
     // Stage 6: Persist state
@@ -239,7 +126,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
       { role: 'user' as const, content: incomingMsg },
       { role: 'assistant' as const, content: reply },
     ];
-    updateConversationStateFromGathering(teamsUserId, 'teams', updatedHistory, pendingIntents, activeIntentIdx, stillGathering, updatedTaskFields, pmIssueKey).catch(console.error);
+    updateConversationState(teamsUserId, 'teams', updatedHistory, updatedPendingIntents, updatedActiveIntentIdx, pmIssueKey).catch(console.error);
 
     // Audit (non-blocking)
     logPost({ intakeLogId, senderId: teamsUserId, activityId, incomingMsg, reply: finalReply, classification, confidence, config, processingTimeMs, pmIssueKey });
