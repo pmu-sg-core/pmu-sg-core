@@ -4,10 +4,15 @@
 // ── Task field collection (gathering phase) ───────────────────────────────────
 
 export interface TaskFieldsState {
+  // PM task fields
   title?: string;
   description?: string;
   priority?: 'Low' | 'Medium' | 'High' | 'Critical';
   assigneeEmail?: string;
+  // BCA site diary fields
+  siteProjectId?: string;
+  reportDate?: string;
+  transcript?: string;
 }
 
 export interface TaskFields {
@@ -19,7 +24,8 @@ export interface TaskFields {
 
 export const FIELD_ORDER: (keyof TaskFieldsState)[] = ['title', 'description', 'priority', 'assigneeEmail'];
 
-export const FIELD_LABELS: Record<keyof TaskFieldsState, string> = {
+type PMFieldKey = 'title' | 'description' | 'priority' | 'assigneeEmail';
+export const FIELD_LABELS: Record<PMFieldKey, string> = {
   title: 'title (a short label for the task)',
   description: 'description (what needs to be done and why)',
   priority: 'priority — reply with one of: Low, Medium, High, Critical',

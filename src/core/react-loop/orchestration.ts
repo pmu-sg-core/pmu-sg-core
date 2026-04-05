@@ -194,7 +194,7 @@ export async function callLLMGathering({
   const hypothetical = { ...taskFields, [nextField]: 'filled' };
   const nextNextField = getNextField(hypothetical, canAssignTickets);
   const afterExtraction = nextNextField
-    ? `Then ask for the next missing field: ${FIELD_LABELS[nextNextField]}.`
+    ? `Then ask for the next missing field: ${FIELD_LABELS[nextNextField as keyof typeof FIELD_LABELS] ?? nextNextField}.`
     : `All required fields will then be complete — reply with a brief confirmation that you have everything and will create the ticket now. Do not mention a ticket number yet.`;
 
   const gatheringSystem = `${systemPrompt}

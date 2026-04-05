@@ -4,6 +4,8 @@
 import { callLLMGathering, callLLMDecompose, type DecomposedIntent } from './orchestration';
 import { getNextField, type TaskFieldsState, type TaskFields } from '@/adapters/pmtool/types';
 import { routeWorkItem, getWorkItemByKey, reassignWorkItem } from '@/adapters/router';
+import { extractDiaryFromTranscript } from '@/adapters/bca/extract-diary';
+import { supabase } from '@/lib/supabase';
 import {
   type PendingIntent,
   createIntent,
@@ -82,6 +84,68 @@ async function executeIntent(
       return { reply, pmIssueKey: item?.externalKey, updatedIntent: { ...intent, status: 'complete', result: { issueKey: key, message: reply }, completedAt: new Date().toISOString() } };
     } catch {
       return { reply: `Something went wrong with the reassignment.`, updatedIntent: { ...intent, status: 'failed', completedAt: new Date().toISOString() } };
+    }
+  }
+
+  if (intent.type === 'bca.site_diary_create') {
+    const siteProjectId = intent.fields.siteProjectId;
+    const reportDate = intent.fields.reportDate ?? new Date().toISOString().slice(0, 10);
+    const transcript = intent.fields.transcript ?? '';
+    if (!siteProjectId) {
+      return { reply: `Which site project is this diary for? Please share the project reference.`, updatedIntent: intent };
+    }
+
+    // Resolve project UUID from project_ref if a ref string was provided
+    let resolvedProjectId = siteProjectId;
+    if (!/^[0-9a-f-]{36}$/.test(siteProjectId)) {
+      const { data: proj } = await supabase
+        .from('site_projects')
+        .select('id')
+        .eq('project_ref', siteProjectId)
+        .single();
+      if (!proj) return { reply: `I couldn't find project "${siteProjectId}". Please check the project reference.`, updatedIntent: { ...intent, status: 'failed', completedAt: new Date().toISOString() } };
+      resolvedProjectId = proj.id;
+    }
+
+    try {
+      const { diary, confidence, flags } = await extractDiaryFromTranscript({
+        transcript,
+        projectId: siteProjectId,
+        reportDate,
+        lat: null,
+        long: null,
+        geolocationVerified: false,
+        platform: params.sourceMessageId ? 'WhatsApp' : 'Microsoft Teams',
+      });
+
+      // Upsert diary entry
+      const { data: entry } = await supabase
+        .from('site_diary_entries')
+        .upsert({
+          site_project_id: resolvedProjectId,
+          intake_log_id: params.sourceMessageId ?? null,
+          report_date: reportDate,
+          weather_am: diary.metadata.weather.am,
+          weather_pm: diary.metadata.weather.pm,
+          weather_impact: diary.metadata.weather.impact_on_work,
+          raw_transcript: transcript,
+          structured_json: diary,
+          confidence_score: confidence,
+        }, { onConflict: 'site_project_id,report_date' })
+        .select('id')
+        .single();
+
+      const lowConf = flags?.some(f => f.includes('low_confidence'));
+      const reply = entry
+        ? `Site diary for ${reportDate} saved (ref: ${siteProjectId}).${lowConf ? ' ⚠️ Some fields had low confidence — please review before signing off.' : ''}`
+        : `I extracted the diary but couldn't save it. Please try again.`;
+
+      return {
+        reply,
+        updatedIntent: { ...intent, status: 'complete', result: { data: { diaryEntryId: entry?.id } }, completedAt: new Date().toISOString() },
+      };
+    } catch {
+      return { reply: `Something went wrong extracting the site diary. Please try again.`, updatedIntent: { ...intent, status: 'failed', completedAt: new Date().toISOString() } };
     }
   }
 
