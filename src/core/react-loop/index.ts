@@ -1,8 +1,7 @@
 // ReAct loop engine — orchestrates multi-intent conversations.
 // Route handlers call runAgentLoop() instead of managing intent routing themselves.
 
-import { callLLMGathering, callLLMDecompose, type DecomposedIntent } from '@/lib/orchestration';
-import type { AgentGovernance } from '@/lib/governance';
+import { callLLMGathering, callLLMDecompose, type DecomposedIntent } from './orchestration';
 import { getNextField, type TaskFieldsState, type TaskFields } from '@/adapters/pmtool/types';
 import { routeWorkItem, getWorkItemByKey, reassignWorkItem } from '@/adapters/router';
 import {
