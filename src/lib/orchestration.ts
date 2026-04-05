@@ -339,11 +339,51 @@ ${buildOperationalContract(
   )}
 
 <decomposition_rules>
-  <rule>Identify every distinct intent in the user message. A single message may contain multiple intents (e.g. "create a task AND check KAN-3").</rule>
-  <rule>For each intent, set the type and extract any available fields (issueKey, assigneeEmail, task fields).</rule>
-  <rule>For pm.task_create: populate the task object only if title, description, and priority are ALL present in the message. Otherwise leave task empty — fields will be gathered conversationally.</rule>
-  <rule>Order intents as they appear in the message. The first intent drives the opening reply.</rule>
-  <rule>The reply should acknowledge all intents briefly and address the first one — e.g. "Sure! I'll create that task and check KAN-3 after. First, what's the title?"</rule>
+  <rule>
+    <description>Identify every distinct intent in the user message. A single message may contain multiple intents.</description>
+    <action>For each intent, set the type and extract any available fields (issueKey, assigneeEmail, task fields, site_project_id).</action>
+  </rule>
+  <rule intent="pm.task_create">
+    <description>User wants to create a new project management task.</description>
+    <action>Populate the task object only if title, description, and priority are ALL present. Otherwise leave task empty — fields will be gathered conversationally.</action>
+  </rule>
+  <rule intent="pm.task_query">
+    <description>User wants to check the status or details of an existing task.</description>
+    <action>Extract the issue key into issueKey if mentioned; leave blank if not stated.</action>
+  </rule>
+  <rule intent="pm.task_assign">
+    <description>User wants to reassign an existing task to a team member.</description>
+    <action>Extract issue key and assignee email. Only classify this when can_assign_tickets is true.</action>
+  </rule>
+  <rule intent="bca.site_diary_create">
+    <description>User is reporting today's site activities — workers present, tasks completed, materials delivered, or instructions received from RE, RTO, or QP.</description>
+    <signals>
+      <signal>Trade or labour references: rebar, concrete, formwork, steel, electrical, plumbing, scaffolding</signal>
+      <signal>Location references: block, level, grid line, zone, storey</signal>
+      <signal>Personnel references: RE, RTO, QP, foreman, supervisor</signal>
+      <signal>Material or delivery references: DO number, Grade 40, m3, tonnes, supplier delivery</signal>
+      <signal>Inspection references: slump test, cube test, pre-pour check, inspection pass or fail</signal>
+      <signal>Time references tied to site work: "poured at 3pm", "workers clocked in at 8", "finished by noon"</signal>
+    </signals>
+    <action>Classify as bca.site_diary_create. Do not ask for clarification on minor details — the AI extraction layer will handle structured parsing.</action>
+  </rule>
+  <rule intent="bca.site_diary_query">
+    <description>User wants to retrieve or review a previously logged site diary entry.</description>
+    <signals>
+      <signal>References to a past date or shift: "yesterday", "this morning", "last Tuesday"</signal>
+      <signal>Requests to check what was logged, submitted, or recorded</signal>
+    </signals>
+    <action>Extract the date reference if present. Reply with a summary of what was logged for that date.</action>
+  </rule>
+  <rule intent="out_of_scope">
+    <description>Request does not match any supported capability.</description>
+    <action>Include an intent of type out_of_scope. Politely decline in the reply.</action>
+  </rule>
+  <rule intent="general_inquiry|status_update|complaint">
+    <description>Everything else — general questions, status updates, complaints not related to task creation or site diary.</description>
+    <action>Classify appropriately and respond conversationally.</action>
+  </rule>
+  <ordering>Order intents as they appear in the message. The first intent drives the opening reply.</ordering>
 </decomposition_rules>`;
 
   const taskProperties: Record<string, unknown> = {
@@ -372,7 +412,7 @@ ${buildOperationalContract(
               items: {
                 type: 'object',
                 properties: {
-                  type:          { type: 'string', enum: ['pm.task_create', 'pm.task_query', 'pm.task_assign', 'general_inquiry', 'status_update', 'complaint', 'out_of_scope'] },
+                  type:          { type: 'string', enum: ['pm.task_create', 'pm.task_query', 'pm.task_assign', 'bca.site_diary_create', 'bca.site_diary_query', 'general_inquiry', 'status_update', 'complaint', 'out_of_scope'] },
                   issueKey:      { type: 'string' },
                   assigneeEmail: { type: 'string' },
                   task: {
