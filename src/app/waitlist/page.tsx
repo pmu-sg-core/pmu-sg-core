@@ -402,46 +402,52 @@ export default function WaitlistPage() {
 
             <div className="grid md:grid-cols-3 gap-6">
               <PricingCard
-                tier="Miyu Lite"
-                price="S$49"
-                unit="project"
+                tier="Lite"
+                price="S$149"
+                unit="mo"
                 target="Freelancers & boutique agencies"
                 features={[
                   'WhatsApp native interface',
-                  'Jira, Monday.com, Asana & Trello integrations',
-                  'Up to 100 task creations/mo',
+                  'Up to 50 AI task actions/mo',
+                  'Jira, Monday.com, Asana & Trello',
+                  '2 channels · 5 team members',
+                  'Governance audit trail',
                   'Community support',
                 ]}
               />
               <PricingCard
-                tier="Pro Unit"
-                price="S$299"
-                unit="unit/mo"
+                tier="Pro"
+                price="S$449"
+                unit="mo"
                 target="Growing SMEs (PSG-Eligible)"
                 highlighted
                 features={[
                   'Everything in Lite',
-                  'Unlimited projects per unit',
-                  'Predictive Risk Nudges',
-                  'Draft/Approval workflows',
-                  'Priority email & chat support',
+                  'Up to 200 AI task actions/mo',
+                  'Microsoft Teams + WhatsApp',
+                  '4 channels · 20 team members',
+                  'Task reassignment & approvals',
+                  'Chat history & knowledge base',
+                  'Priority support',
                 ]}
               />
               <PricingCard
-                tier="Corporate Shield"
+                tier="Corporate"
                 price="Custom"
                 unit="mo"
                 target="Regulated industries"
                 disabled
                 features={[
-                  'Microsoft Teams native',
-                  'SSO via Entra ID',
-                  'WORM storage compliance',
-                  'Custom ERP adapters',
+                  'Unlimited AI task actions',
+                  'Unlimited channels & members',
+                  'SSO via Microsoft Entra ID',
+                  'MAS / IMDA audit-ready logs',
+                  'Custom ERP & system adapters',
+                  'Dedicated success manager',
                 ]}
               />
             </div>
-            <p className="text-xs text-slate-600 mt-6 text-center">Singapore SMEs may be eligible to claim up to 50% of Pro Unit costs under the PSG/AI Impact Grant.</p>
+            <p className="text-xs text-slate-600 mt-6 text-center">Singapore SMEs may be eligible to claim up to 70–90% of subscription costs under the WSG Job Redesign (JR+) and EnterpriseSG grants.</p>
           </div>
         </section>
 
