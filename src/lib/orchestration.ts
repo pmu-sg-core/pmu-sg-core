@@ -135,7 +135,9 @@ ${buildOperationalContract(
     };
   } catch (e) {
     console.error('[callLLM] API error:', e);
-    return { reply: "I'm sorry, something went wrong. Please try again.", classification: 'general_inquiry', confidence: 0 };
+    // Return pm.task_incomplete so the route handler keeps gathering state intact.
+    // The user's last message is preserved in conversationHistory — they can retry without restarting.
+    return { reply: "Sorry, I hit a snag. Your conversation is saved — just send your message again.", classification: 'pm.task_incomplete', confidence: 0 };
   }
 }
 
