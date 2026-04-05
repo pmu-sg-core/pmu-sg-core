@@ -417,7 +417,11 @@ ${buildOperationalContract(
               items: {
                 type: 'object',
                 properties: {
-                  type:          { type: 'string', enum: ['pm.task_create', 'pm.task_query', 'pm.task_assign', 'bca.site_diary_create', 'bca.site_diary_query', 'general_inquiry', 'status_update', 'complaint', 'out_of_scope'] },
+                  type:          { type: 'string', enum: [
+                    'pm.task_create', 'pm.task_query', 'pm.task_assign',
+                    ...(canAccessBca ? ['bca.site_diary_create', 'bca.site_diary_query'] : []),
+                    'general_inquiry', 'status_update', 'complaint', 'out_of_scope',
+                  ] },
                   issueKey:      { type: 'string' },
                   assigneeEmail: { type: 'string' },
                   task: {
