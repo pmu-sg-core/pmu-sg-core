@@ -303,6 +303,7 @@ export async function callLLMDecompose({
   systemPrompt,
   conversationHistory = [],
   canAssignTickets = false,
+  canAccessBca = false,
   localeHints,
 }: {
   provider: string;
@@ -313,6 +314,7 @@ export async function callLLMDecompose({
   systemPrompt: string;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   canAssignTickets?: boolean;
+  canAccessBca?: boolean;
   localeHints?: string | null;
 }): Promise<DecomposeResult> {
   const recentHistory = conversationHistory.slice(-HISTORY_WINDOW);
@@ -329,11 +331,14 @@ ${buildOperationalContract(
       `Create new tasks by collecting: title, description, priority${canAssignTickets ? ', assignee email' : ''}.`,
       `Check the status of an existing task by issue key.`,
       ...(canAssignTickets ? [`Reassign an existing task to a team member by issue key and email.`] : []),
+      ...(canAccessBca ? [`Log today's site activities as a BCA-compliant site diary entry (Reg 22).`] : []),
+      ...(canAccessBca ? [`Retrieve a previously logged site diary entry by date.`] : []),
       `Answer general questions about pmu.sg and its features.`,
     ],
     [
       `Cannot set due dates, delete tickets, look up rosters, or list available assignees.`,
       ...(!canAssignTickets ? [`Cannot reassign tasks — this requires a higher plan tier.`] : []),
+      ...(!canAccessBca ? [`Cannot log or retrieve site diaries — BCA module not active on this account.`] : []),
     ],
     `Include an intent of type "out_of_scope" for any unsupported request. Politely decline in the reply.`
   )}
@@ -354,7 +359,7 @@ ${buildOperationalContract(
   <rule intent="pm.task_assign">
     <description>User wants to reassign an existing task to a team member.</description>
     <action>Extract issue key and assignee email. Only classify this when can_assign_tickets is true.</action>
-  </rule>
+  </rule>${canAccessBca ? `
   <rule intent="bca.site_diary_create">
     <description>User is reporting today's site activities — workers present, tasks completed, materials delivered, or instructions received from RE, RTO, or QP.</description>
     <signals>
@@ -374,7 +379,7 @@ ${buildOperationalContract(
       <signal>Requests to check what was logged, submitted, or recorded</signal>
     </signals>
     <action>Extract the date reference if present. Reply with a summary of what was logged for that date.</action>
-  </rule>
+  </rule>` : ''}
   <rule intent="out_of_scope">
     <description>Request does not match any supported capability.</description>
     <action>Include an intent of type out_of_scope. Politely decline in the reply.</action>

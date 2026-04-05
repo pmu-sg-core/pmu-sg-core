@@ -229,6 +229,7 @@ export async function runAgentLoop(params: {
   systemPrompt: string;
   localeHints?: string | null;
   canAssignTickets: boolean;
+  canAccessBca: boolean;
   platform: 'WhatsApp' | 'Microsoft Teams';
   sourceMessageId?: string;
   actorId?: string;
@@ -237,7 +238,7 @@ export async function runAgentLoop(params: {
     userMessage, history, pendingIntents, activeIntentIdx,
     gatheringTask, taskFields, lastPmIssueKey,
     provider, model, maxTokens, temperature, systemPrompt, localeHints,
-    canAssignTickets, platform, sourceMessageId, actorId,
+    canAssignTickets, canAccessBca, platform, sourceMessageId, actorId,
   } = params;
 
   const execParams = { lastPmIssueKey, sourceMessageId, actorId, canAssignTickets };
@@ -309,7 +310,7 @@ export async function runAgentLoop(params: {
 
   const decomposeResult = await callLLMDecompose({
     provider, model, text: userMessage, maxTokens, temperature, systemPrompt,
-    conversationHistory: history, canAssignTickets, localeHints,
+    conversationHistory: history, canAssignTickets, canAccessBca, localeHints,
   });
 
   const newIntents = buildIntentsFromDecomposition(decomposeResult.intents, canAssignTickets);

@@ -24,6 +24,8 @@ interface SubscriptionRow {
 export interface AgentGovernance extends ConfigSettings {
   plan_type: string;
   can_assign_tickets: boolean;
+  can_access_bca: boolean;
+  site_project_id: string | null;   // active site project for BCA subscribers
   locale_hints: string | null;
 }
 
@@ -50,6 +52,10 @@ export async function getAgentGovernance(
           enable_history,
           locale_hints
         )
+      ),
+      subscriber (
+        sector_tags,
+        site_projects ( id )
       )
     `)
     .eq(column, identity)
@@ -57,7 +63,9 @@ export async function getAgentGovernance(
 
   if (error || !data) return null;
 
-  const row = data as unknown as SubscriptionRow;
+  const row = data as unknown as SubscriptionRow & {
+    subscriber?: { sector_tags: string[] | null; site_projects?: { id: string }[] } | null;
+  };
   const tier = Array.isArray(row.plan_tiers) ? row.plan_tiers[0] : row.plan_tiers;
   const rawConfig = tier?.config_settings;
   const config: ConfigSettings | null = rawConfig
@@ -66,5 +74,14 @@ export async function getAgentGovernance(
 
   if (!config) return null;
 
-  return { ...config, plan_type: row.plan_type, can_assign_tickets: false };
+  const sectorTags = row.subscriber?.sector_tags ?? [];
+  const siteProjects = row.subscriber?.site_projects ?? [];
+
+  return {
+    ...config,
+    plan_type: row.plan_type,
+    can_assign_tickets: false,
+    can_access_bca: sectorTags.includes('bca'),
+    site_project_id: siteProjects[0]?.id ?? null,
+  };
 }

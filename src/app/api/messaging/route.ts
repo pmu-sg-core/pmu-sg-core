@@ -92,6 +92,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
       systemPrompt: baseSystemPrompt,
       localeHints: config?.locale_hints,
       canAssignTickets,
+      canAccessBca: config?.can_access_bca ?? false,
       platform: 'WhatsApp',
       sourceMessageId: messageSid,
       actorId: senderPhone,
