@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { stripe } from '@/lib/stripe';
+import { getStripe } from '@/lib/stripe';
 import { supabase } from '@/lib/supabase';
 import type Stripe from 'stripe';
 
@@ -25,7 +25,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const plan = session.metadata?.plan ?? 'lite';
 
   // Fetch period end from the Stripe subscription
-  const stripeSub = await stripe.subscriptions.retrieve(stripeSubId);
+  const stripeSub = await getStripe().subscriptions.retrieve(stripeSubId);
   const periodEnd = new Date((stripeSub as any).current_period_end * 1000).toISOString();
 
   const activeStatusId = await getStatusId('active');
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+    event = getStripe().webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (err) {
     console.error('[stripe/webhook] Signature verification failed:', err);
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });

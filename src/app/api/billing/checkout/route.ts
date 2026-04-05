@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { stripe, PLAN_PRICES } from '@/lib/stripe';
+import { getStripe, getPlanPrices } from '@/lib/stripe';
 import { supabase } from '@/lib/supabase';
 
 export async function POST(req: Request) {
@@ -10,7 +10,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const priceId = PLAN_PRICES[plan];
+    const stripe = getStripe();
+    const priceId = getPlanPrices()[plan];
     if (!priceId) {
       return NextResponse.json({ error: `Unknown plan: ${plan}` }, { status: 400 });
     }
