@@ -1,0 +1,10 @@
+{
+  "_comment": "Sample payload for POST /api/bca/extract — uses test site project from bca_test_data.sql",
+  "transcript": "Today we had 12 workers on site at Block A Level 3. RC01 team poured Grade 40 concrete for the slab at grid line C-D. Slump test passed at 75mm. RE Mr Tan verified. Two deliveries from Island Concrete, DO numbers IC-2501 and IC-2502, total 24 cubic metres.",
+  "site_project_id": "bb000003-0000-0000-0000-000000000003",
+  "report_date": "2026-04-05",
+  "lat": 1.331974,
+  "long": 103.848465,
+  "geolocation_verified": false,
+  "platform": "WhatsApp Voice Note"
+}
