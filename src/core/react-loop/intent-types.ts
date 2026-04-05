@@ -4,9 +4,15 @@
 import type { TaskFieldsState } from '@/adapters/pmtool/types';
 
 export type IntentType =
+  // ── PM (Phase 1 active) ───────────────────────────────────────────────────
   | 'pm.task_create'
   | 'pm.task_query'
   | 'pm.task_assign'
+  // ── BCA Site Management (Phase 2) ─────────────────────────────────────────
+  | 'bca.site_diary_create'    // voice note → structured Reg 22 diary entry
+  | 'bca.site_diary_query'     // "what did we log for Block A today?"
+  | 'bca.site_incident_report' // safety incident capture
+  // ── Cross-domain ──────────────────────────────────────────────────────────
   | 'general_inquiry'
   | 'status_update'
   | 'complaint'
