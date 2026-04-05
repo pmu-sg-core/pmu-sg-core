@@ -1,5 +1,11 @@
 import { supabase } from './supabase';
-import type { TaskFieldsState } from './agent-config';
+import type { TaskFieldsState } from '@/adapters/pmtool/types';
+import {
+  type PendingIntent,
+  deriveGatheringState,
+  createIntent,
+  getActiveIntent,
+} from '@/core/react-loop/intent-types';
 
 // Check if sender is blacklisted
 export async function isBlacklisted(phoneNumber: string): Promise<boolean> {
@@ -71,43 +77,57 @@ export interface ConversationTurn {
   content: string;
 }
 
-// Fetch conversation history, gathering state, and partial task fields (active record only)
-export async function getConversationState(senderId: string, channel: string): Promise<{
+// ── Conversation state ────────────────────────────────────────────────────────
+
+/** Full conversation state including the intent queue. */
+export interface ConversationState {
   history: ConversationTurn[];
+  pendingIntents: PendingIntent[];
+  activeIntentIdx: number;
+  // Legacy shim — derived from queue; keeps existing route handlers unchanged
   gatheringTask: boolean;
   taskFields: TaskFieldsState;
-}> {
+}
+
+/** Fetch conversation state for the active record. */
+export async function getConversationState(
+  senderId: string,
+  channel: string,
+): Promise<ConversationState> {
   const { data } = await supabase
     .from('active_conversations')
-    .select('conversation_history, gathering_task, task_fields')
+    .select('conversation_history, pending_intents, active_intent_idx')
     .eq('sender_id', senderId)
     .eq('channel', channel)
     .eq('is_active', true)
     .single();
+
+  const pendingIntents = (data?.pending_intents as PendingIntent[]) ?? [];
+  const activeIntentIdx = (data?.active_intent_idx as number) ?? 0;
+
   return {
     history: (data?.conversation_history as ConversationTurn[]) ?? [],
-    gatheringTask: data?.gathering_task ?? false,
-    taskFields: (data?.task_fields as TaskFieldsState) ?? {},
+    pendingIntents,
+    activeIntentIdx,
+    ...deriveGatheringState(pendingIntents, activeIntentIdx),
   };
 }
 
-// Update conversation history, gathering state, and partial task fields on the active record.
-// Uses UPDATE first (matches partial unique index WHERE is_active=true), falls back to INSERT
-// for first-time senders. Supabase upsert cannot express partial index ON CONFLICT clauses.
+/** Update conversation history and intent queue on the active record.
+ *  Falls back to INSERT for first-time senders (partial index prevents plain upsert). */
 export async function updateConversationState(
   senderId: string,
   channel: string,
   history: ConversationTurn[],
-  gatheringTask: boolean,
-  taskFields: TaskFieldsState,
+  pendingIntents: PendingIntent[],
+  activeIntentIdx: number,
   pmIssueKey?: string,
 ): Promise<void> {
   const MAX_HISTORY = 20;
-  const trimmed = history.slice(-MAX_HISTORY);
   const payload = {
-    conversation_history: trimmed,
-    gathering_task: gatheringTask,
-    task_fields: gatheringTask ? taskFields : {},
+    conversation_history: history.slice(-MAX_HISTORY),
+    pending_intents: pendingIntents,
+    active_intent_idx: activeIntentIdx,
     last_interaction_at: new Date().toISOString(),
     ...(pmIssueKey ? { last_pm_issue_key: pmIssueKey } : {}),
   };
@@ -126,8 +146,8 @@ export async function updateConversationState(
   }
 }
 
-// Retire the current active conversation and open a fresh one for an unrelated message.
-// The old record is marked inactive; retention rules handle eventual cleanup.
+/** Retire the active conversation and open a fresh one.
+ *  Old record → is_active=false; retention rules handle cleanup. */
 export async function rotateConversationState(
   senderId: string,
   channel: string,
@@ -147,13 +167,48 @@ export async function rotateConversationState(
       channel,
       is_active: true,
       conversation_history: firstTurns,
-      gathering_task: false,
-      task_fields: {},
+      pending_intents: [],
+      active_intent_idx: 0,
       last_interaction_at: new Date().toISOString(),
     });
 }
 
-// Log AI interaction to ai_audit_trail
+/** Bridge for existing route handlers: translates legacy (stillGathering, taskFields) into
+ *  intent queue mutations, then calls updateConversationState.
+ *  Route handlers pass the pendingIntents/activeIntentIdx they already loaded from DB. */
+export async function updateConversationStateFromGathering(
+  senderId: string,
+  channel: string,
+  history: ConversationTurn[],
+  pendingIntents: PendingIntent[],
+  activeIntentIdx: number,
+  stillGathering: boolean,
+  updatedTaskFields: TaskFieldsState,
+  pmIssueKey?: string,
+): Promise<void> {
+  const updatedIntents = [...pendingIntents];
+  const active = getActiveIntent(updatedIntents, activeIntentIdx);
+
+  if (active) {
+    updatedIntents[activeIntentIdx] = {
+      ...active,
+      status: stillGathering ? 'gathering' : 'complete',
+      fields: updatedTaskFields,
+      ...(pmIssueKey ? { result: { issueKey: pmIssueKey }, completedAt: new Date().toISOString() } : {}),
+    };
+  } else if (stillGathering) {
+    // First turn: no intent exists yet — create one
+    const newIntent = createIntent('pm.task_create');
+    newIntent.fields = updatedTaskFields;
+    updatedIntents.push(newIntent);
+  }
+
+  const nextIdx = !stillGathering && active ? activeIntentIdx + 1 : activeIntentIdx;
+  await updateConversationState(senderId, channel, history, updatedIntents, nextIdx, pmIssueKey);
+}
+
+// ── Audit ─────────────────────────────────────────────────────────────────────
+
 export async function logAuditTrail(params: {
   commLogId: string | null;
   inputText: string;

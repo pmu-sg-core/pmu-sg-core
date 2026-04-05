@@ -1,8 +1,9 @@
--- Active conversations: tracks per-channel state for multi-turn task collection.
+-- Active conversations: tracks per-channel state for multi-turn, multi-intent orchestration.
 -- Consolidated from: active_conversations.sql, alter_rename_jira_columns.sql,
 --                    alter_add_system_status_fks.sql, drop_legacy_status_columns.sql,
 --                    alter_active_conversations_multirecord.sql,
---                    alter_active_conversations_taskfields.sql
+--                    alter_active_conversations_taskfields.sql,
+--                    alter_active_conversations_intent_queue.sql
 DROP TABLE IF EXISTS public.active_conversations CASCADE;
 
 CREATE TABLE public.active_conversations (
@@ -13,12 +14,26 @@ CREATE TABLE public.active_conversations (
     last_pm_issue_key    TEXT,
     last_interaction_at  TIMESTAMPTZ DEFAULT NOW(),
     status_fk            INT         REFERENCES public.system_status(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-    conversation_history JSONB       DEFAULT '[]',   -- last N exchanges: [{role, content}]
-    gathering_task       BOOLEAN     DEFAULT FALSE,  -- true while Miyu is collecting task details
-    task_fields          JSONB       DEFAULT '{}'    -- partial field state during multi-turn gathering
+    conversation_history JSONB       NOT NULL DEFAULT '[]',  -- last N exchanges: [{role, content}]
+
+    -- Intent queue (replaces gathering_task + task_fields)
+    -- Array of PendingIntent objects; each has: id, type, status, fields, result?, createdAt, completedAt?
+    pending_intents      JSONB       NOT NULL DEFAULT '[]',
+    -- Index into pending_intents pointing to the intent currently being worked on
+    active_intent_idx    INTEGER     NOT NULL DEFAULT 0
 );
 
 -- One active conversation per sender per channel; inactive records kept for audit.
 CREATE UNIQUE INDEX unique_active_conversation
     ON public.active_conversations (sender_id, channel)
     WHERE is_active = TRUE;
+
+-- Incremental: migrate existing rows if table already exists
+-- (safe to run on a live DB that still has the old columns)
+ALTER TABLE public.active_conversations
+    ADD COLUMN IF NOT EXISTS pending_intents   JSONB   NOT NULL DEFAULT '[]',
+    ADD COLUMN IF NOT EXISTS active_intent_idx INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE public.active_conversations
+    DROP COLUMN IF EXISTS gathering_task,
+    DROP COLUMN IF EXISTS task_fields;

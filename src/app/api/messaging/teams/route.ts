@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAgentGovernance, callLLM, callLLMGathering, getNextField } from '@/lib/agent-config';
-import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationState, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
+import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationStateFromGathering, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
 import { routeWorkItem, checkCanAssign } from '@/adapters/router';
 import { TeamsAdapter } from '@/adapters/messenger/teams';
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     }
 
     // Stage 4: Load conversation state + check Jira assign permission
-    const [{ history, gatheringTask, taskFields }, subscriberEmail] = await Promise.all([
+    const [{ history, gatheringTask, taskFields, pendingIntents, activeIntentIdx }, subscriberEmail] = await Promise.all([
       getConversationState(teamsUserId, 'teams'),
       getSubscriberEmail(teamsUserId, 'teams'),
     ]);
@@ -199,7 +199,7 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
       { role: 'user' as const, content: incomingMsg },
       { role: 'assistant' as const, content: reply },
     ];
-    updateConversationState(teamsUserId, 'teams', updatedHistory, stillGathering, updatedTaskFields, pmIssueKey).catch(console.error);
+    updateConversationStateFromGathering(teamsUserId, 'teams', updatedHistory, pendingIntents, activeIntentIdx, stillGathering, updatedTaskFields, pmIssueKey).catch(console.error);
 
     // Audit (non-blocking)
     logPost({ intakeLogId, senderId: teamsUserId, activityId, incomingMsg, reply: finalReply, classification, confidence, config, processingTimeMs, pmIssueKey });
