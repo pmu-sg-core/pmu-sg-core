@@ -56,6 +56,12 @@ export default async function OntologyPage() {
               >
                 Ontology
               </a>
+              <a
+                href="/admin/billing"
+                className="text-sm text-zinc-500 hover:text-white px-3 py-1.5 rounded-lg transition-colors"
+              >
+                Billing
+              </a>
             </nav>
           </div>
           <form action={logoutAdmin}>
