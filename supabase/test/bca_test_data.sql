@@ -34,7 +34,7 @@ INSERT INTO public.subscriptions (
 VALUES (
     'bb000002-0000-0000-0000-000000000002',
     'pro',
-    '+6591234567',
+    '+6597106689',
     'bb000001-0000-0000-0000-000000000001',
     0, 0
 )
@@ -77,4 +77,4 @@ COMMIT;
 -- FROM public.subscriptions sub
 -- LEFT JOIN public.subscriber sr ON sr.id = sub.subscriber_id
 -- LEFT JOIN public.site_projects sp ON sp.subscription_id = sub.id
--- WHERE sub.whatsapp_number = '+6591234567';
+-- WHERE sub.whatsapp_number = '+6597106689';
