@@ -35,10 +35,13 @@ export async function getAgentGovernance(
 ): Promise<AgentGovernance | null> {
   const column = channel === 'teams' ? 'teams_user_id' : 'whatsapp_number';
 
+  // ── Query 1: subscription + plan config ───────────────────────────────────
   const { data, error } = await supabase
     .from('subscriptions')
     .select(`
+      id,
       plan_type,
+      subscriber_id,
       plan_tiers!inner (
         config_settings (
           max_input_chars,
@@ -52,19 +55,14 @@ export async function getAgentGovernance(
           enable_history,
           locale_hints
         )
-      ),
-      subscriber ( sector_tags ),
-      site_projects ( id )
+      )
     `)
     .eq(column, identity)
     .single();
 
   if (error || !data) return null;
 
-  const row = data as unknown as SubscriptionRow & {
-    subscriber?: { sector_tags: string[] | null } | null;
-    site_projects?: { id: string }[] | null;
-  };
+  const row = data as unknown as SubscriptionRow & { id: string; subscriber_id: string | null };
   const tier = Array.isArray(row.plan_tiers) ? row.plan_tiers[0] : row.plan_tiers;
   const rawConfig = tier?.config_settings;
   const config: ConfigSettings | null = rawConfig
@@ -73,14 +71,32 @@ export async function getAgentGovernance(
 
   if (!config) return null;
 
-  const sectorTags = row.subscriber?.sector_tags ?? [];
-  const siteProjects = row.site_projects ?? [];
+  // ── Query 2: subscriber sector_tags (BCA gate) ────────────────────────────
+  let sectorTags: string[] = [];
+  if (row.subscriber_id) {
+    const { data: sub } = await supabase
+      .from('subscriber')
+      .select('sector_tags')
+      .eq('id', row.subscriber_id)
+      .single();
+    sectorTags = sub?.sector_tags ?? [];
+  }
+
+  // ── Query 3: first site project for this subscription ─────────────────────
+  let siteProjectId: string | null = null;
+  const { data: projects } = await supabase
+    .from('site_projects')
+    .select('id')
+    .eq('subscription_id', row.id)
+    .limit(1)
+    .single();
+  siteProjectId = projects?.id ?? null;
 
   return {
     ...config,
     plan_type: row.plan_type,
     can_assign_tickets: false,
     can_access_bca: sectorTags.includes('bca'),
-    site_project_id: siteProjects[0]?.id ?? null,
+    site_project_id: siteProjectId,
   };
 }
