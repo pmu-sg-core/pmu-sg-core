@@ -16,8 +16,8 @@ export function getStripe(): Stripe {
 
 export function getPlanPrices(): Record<string, string> {
   return {
-    lite:      process.env.STRIPE_PRICE_LITE!,
-    pro:       process.env.STRIPE_PRICE_PRO!,
-    corporate: process.env.STRIPE_PRICE_CORPORATE!,
+    lite: process.env.STRIPE_PRICE_LITE!,
+    pro:  process.env.STRIPE_PRICE_PRO!,
+    // corporate is invite-only — handled manually, no Stripe price ID
   };
 }

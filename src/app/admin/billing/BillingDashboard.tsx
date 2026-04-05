@@ -230,7 +230,6 @@ function GenerateLinkPanel({ subscribers }: { subscribers: SubscriberBilling[] }
           <select value={plan} onChange={e => setPlan(e.target.value)} className={inputClass}>
             <option value="lite">Lite — S$149/mo</option>
             <option value="pro">Pro — S$449/mo</option>
-            <option value="corporate">Corporate — S$1,299/mo</option>
           </select>
         </div>
       </div>
