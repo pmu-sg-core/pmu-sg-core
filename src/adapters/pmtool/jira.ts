@@ -95,6 +95,24 @@ export class JiraAdapter implements PMAdapter {
     return { ...item, externalKey: data.key };
   }
 
+  async updateAssignee(externalKey: string, assigneeEmail: string): Promise<WorkItem | null> {
+    const accountId = await this.findUserByEmail(assigneeEmail).catch(() => null);
+    if (!accountId) return null;
+
+    const res = await fetch(`${this.baseUrl}/issue/${externalKey}/assignee`, {
+      method: 'PUT',
+      headers: this.headers,
+      body: JSON.stringify({ accountId }),
+    });
+
+    if (!res.ok) {
+      console.error('[Jira] updateAssignee failed:', res.status);
+      return null;
+    }
+
+    return this.getWorkItem(externalKey);
+  }
+
   async getWorkItem(externalKey: string): Promise<WorkItem | null> {
     const response = await fetch(`${this.baseUrl}/issue/${externalKey}`, {
       headers: this.headers,

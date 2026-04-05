@@ -37,6 +37,8 @@ export interface LLMResult {
   classification: string;
   confidence: number;
   task?: TaskFields;
+  issueKey?: string;       // populated for pm.task_query and pm.task_assign
+  assigneeEmail?: string;  // populated for pm.task_assign
 }
 
 export async function callLLM({
@@ -72,20 +74,25 @@ ${buildInteractionAnchor(lastOutbound, text, normalModeIntentHint(lastOutbound))
 ${buildOperationalContract(
     [
       `Create new tasks by collecting: title, description, priority${canAssignTickets ? ', assignee email' : ''}.`,
+      `Check the status of an existing task by issue key (e.g. "what's the status of KAN-3?").`,
+      ...(canAssignTickets ? [`Reassign an existing task to a team member by issue key and email.`] : []),
       `Answer general questions about pmu.sg and its features.`,
     ],
     [
-      `Cannot set due dates, update existing tickets, look up rosters, or list available assignees.`,
+      `Cannot set due dates, delete tickets, look up rosters, or list available assignees.`,
       `Cannot collect fields outside the defined set.`,
+      ...(!canAssignTickets ? [`Cannot reassign tasks — this requires a higher plan tier.`] : []),
     ],
-    `Politely decline and explain what Miyu can do: "I can help create tasks and answer general questions about pmu.sg. I'm not able to [action requested]."`
+    `Politely decline and explain what Miyu can do: "I can help create tasks, check task status${canAssignTickets ? ', reassign tasks,' : ''} and answer general questions about pmu.sg. I'm not able to [action requested]."`
   )}
 
 <classification_rules>
   <rule intent="pm.task_incomplete">User signals task creation intent but has not provided all required fields. Ask only for the title first — nothing else.</rule>
   <rule intent="pm.task_request">User has provided ALL required fields in a single message. Populate the task object fully. Only use this when title, description, and priority are all present.</rule>
+  <rule intent="pm.task_query">User wants to check the status or details of an existing task. Extract the issue key into issueKey if mentioned; leave blank if not stated.</rule>
+  <rule intent="pm.task_assign">User wants to reassign an existing task. Extract the issue key into issueKey and the assignee email into assigneeEmail. Only classify this when can_assign_tickets is true.</rule>
   <rule intent="out_of_scope">Request matches any item in operational_contract constraints. Apply the on_out_of_scope protocol immediately.</rule>
-  <rule intent="general_inquiry|status_update|complaint">Everything else that is not task creation or out of scope.</rule>
+  <rule intent="general_inquiry|status_update|complaint">Everything else that is not task creation, query, assign, or out of scope.</rule>
   <answer_handling>
     <on_answer_to_question>If last_outbound ended with a question and user_inbound is any reply, accept it verbatim. Do NOT rephrase, reformat, or ask for confirmation. Move to the next question.</on_answer_to_question>
     <on_confirmation>If last_outbound proposed an action and user replied "yes", "ok", "sure", "can", or similar, treat it as confirmed. Do not ask again.</on_confirmation>
@@ -111,7 +118,7 @@ ${buildOperationalContract(
           type: 'object' as const,
           properties: {
             reply:          { type: 'string', description: 'Plain text response to the user, no markdown.' },
-            classification: { type: 'string', enum: ['general_inquiry', 'pm.task_request', 'pm.task_incomplete', 'status_update', 'complaint', 'out_of_scope'] },
+            classification: { type: 'string', enum: ['general_inquiry', 'pm.task_request', 'pm.task_incomplete', 'pm.task_query', 'pm.task_assign', 'status_update', 'complaint', 'out_of_scope'] },
             confidence:     { type: 'number', description: 'Confidence score 0.0–1.0' },
             task: {
               type: 'object',
@@ -119,6 +126,8 @@ ${buildOperationalContract(
               properties: taskProperties,
               required: ['title', 'description', 'priority'],
             },
+            issueKey:      { type: 'string', description: 'Issue key extracted from user message for pm.task_query or pm.task_assign (e.g. "KAN-3").' },
+            assigneeEmail: { type: 'string', description: 'Assignee email extracted from user message for pm.task_assign.' },
           },
           required: ['reply', 'classification', 'confidence'],
         },
@@ -132,6 +141,8 @@ ${buildOperationalContract(
       classification: (input.classification as string) ?? 'general_inquiry',
       confidence:     (input.confidence as number)     ?? 0.5,
       task:           input.task as TaskFields | undefined,
+      issueKey:       input.issueKey as string | undefined,
+      assigneeEmail:  input.assigneeEmail as string | undefined,
     };
   } catch (e) {
     console.error('[callLLM] API error:', e);

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAgentGovernance, callLLM, callLLMGathering, getNextField } from '@/lib/agent-config';
 import { isBlacklisted, logIntake, logCommunication, logAuditTrail, getConversationState, updateConversationStateFromGathering, rotateConversationState, getSubscriberEmail } from '@/lib/messaging-ops';
 import { writeAuditVault } from '@/lib/security/hash-chain';
-import { routeWorkItem, checkCanAssign } from '@/adapters/router';
+import { routeWorkItem, checkCanAssign, getWorkItemByKey, reassignWorkItem } from '@/adapters/router';
 import { TeamsAdapter } from '@/adapters/messenger/teams';
 
 const messenger = new TeamsAdapter();
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     }
 
     // Stage 4: Load conversation state + check Jira assign permission
-    const [{ history, gatheringTask, taskFields, pendingIntents, activeIntentIdx }, subscriberEmail] = await Promise.all([
+    const [{ history, gatheringTask, taskFields, pendingIntents, activeIntentIdx, lastPmIssueKey }, subscriberEmail] = await Promise.all([
       getConversationState(teamsUserId, 'teams'),
       getSubscriberEmail(teamsUserId, 'teams'),
     ]);
@@ -178,6 +178,46 @@ Always respond in plain text only — no markdown, no bullet points, no asterisk
           console.error('[Teams] routeWorkItem failed:', e);
         }
         stillGathering = false;
+
+      } else if (classification === 'pm.task_query') {
+        const key = result.issueKey ?? lastPmIssueKey ?? null;
+        if (!key) {
+          reply = "Which ticket would you like me to check? Please share the issue key (e.g. KAN-3).";
+        } else {
+          try {
+            const item = await getWorkItemByKey(key);
+            reply = item
+              ? `${item.externalKey}: ${item.title}\nStatus: ${item.status ?? 'Unknown'}\nPriority: ${item.priority}`
+              : `I couldn't find ticket ${key}. Please check the issue key and try again.`;
+          } catch (e) {
+            console.error('[Teams] getWorkItemByKey failed:', e);
+            reply = "Something went wrong fetching that ticket. Please try again.";
+          }
+        }
+        stillGathering = false;
+
+      } else if (classification === 'pm.task_assign' && canAssignTickets) {
+        const key = result.issueKey ?? lastPmIssueKey ?? null;
+        const email = result.assigneeEmail ?? null;
+        if (!key || !email) {
+          reply = !key
+            ? "Which ticket would you like to reassign? Please share the issue key."
+            : "Who should I assign it to? Please share their email address.";
+          stillGathering = false;
+        } else {
+          try {
+            const item = await reassignWorkItem(key, email);
+            reply = item
+              ? `Done. ${item.externalKey} has been assigned to ${email}.`
+              : `I couldn't reassign ${key}. Please check the issue key and email, then try again.`;
+            pmIssueKey = item?.externalKey;
+          } catch (e) {
+            console.error('[Teams] reassignWorkItem failed:', e);
+            reply = "Something went wrong with the reassignment. Please try again.";
+          }
+          stillGathering = false;
+        }
+
       } else {
         stillGathering = classification === 'pm.task_incomplete';
       }

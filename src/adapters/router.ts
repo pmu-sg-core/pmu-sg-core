@@ -27,6 +27,24 @@ export async function checkCanAssign(category: string, email: string): Promise<b
   return adapter.checkAssignPermission(email, route.pm_project_key);
 }
 
+// Fetch a work item by issue key — tries each registered adapter in order
+export async function getWorkItemByKey(externalKey: string): Promise<WorkItem | null> {
+  for (const adapter of Object.values(adapters)) {
+    const item = await adapter.getWorkItem(externalKey).catch(() => null);
+    if (item) return item;
+  }
+  return null;
+}
+
+// Reassign an existing work item by issue key
+export async function reassignWorkItem(externalKey: string, assigneeEmail: string): Promise<WorkItem | null> {
+  for (const adapter of Object.values(adapters)) {
+    const item = await adapter.updateAssignee(externalKey, assigneeEmail).catch(() => null);
+    if (item) return item;
+  }
+  return null;
+}
+
 // Look up routing config from pm_project_routing, then dispatch to the right adapter
 export async function routeWorkItem(item: Omit<WorkItem, 'platform' | 'projectKey' | 'createdAt'>): Promise<WorkItem | null> {
   const { data: route, error: routeError } = await supabase

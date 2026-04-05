@@ -84,6 +84,7 @@ export interface ConversationState {
   history: ConversationTurn[];
   pendingIntents: PendingIntent[];
   activeIntentIdx: number;
+  lastPmIssueKey: string | null;
   // Legacy shim — derived from queue; keeps existing route handlers unchanged
   gatheringTask: boolean;
   taskFields: TaskFieldsState;
@@ -96,7 +97,7 @@ export async function getConversationState(
 ): Promise<ConversationState> {
   const { data } = await supabase
     .from('active_conversations')
-    .select('conversation_history, pending_intents, active_intent_idx')
+    .select('conversation_history, pending_intents, active_intent_idx, last_pm_issue_key')
     .eq('sender_id', senderId)
     .eq('channel', channel)
     .eq('is_active', true)
@@ -109,6 +110,7 @@ export async function getConversationState(
     history: (data?.conversation_history as ConversationTurn[]) ?? [],
     pendingIntents,
     activeIntentIdx,
+    lastPmIssueKey: (data?.last_pm_issue_key as string | null) ?? null,
     ...deriveGatheringState(pendingIntents, activeIntentIdx),
   };
 }
