@@ -58,17 +58,17 @@ COMMIT;
 -- Verification — run separately after seeding
 -- ============================================================
 
--- SELECT
---     sub.id              AS subscription_id,
---     sub.plan_type,
---     sr.email,
---     sr.sector,
---     sr.sector_tags,
---     sr.uen,
---     sp.id               AS site_project_id,
---     sp.project_ref,
---     sp.project_name
--- FROM public.subscriptions sub
--- LEFT JOIN public.subscriber sr ON sr.id = sub.subscriber_id
--- LEFT JOIN public.site_projects sp ON sp.subscription_id = sub.id
--- WHERE sub.whatsapp_number = '+6597106689';
+SELECT
+    sub.id              AS subscription_id,
+    sub.plan_type,
+    sr.email,
+    sr.sector,
+    sr.sector_tags,
+    sr.uen,
+    sp.id               AS site_project_id,
+    sp.project_ref,
+    sp.project_name
+FROM public.subscriptions sub
+LEFT JOIN public.subscriber sr ON sr.id = sub.subscriber_id
+LEFT JOIN public.site_projects sp ON sp.subscription_id = sub.id
+WHERE sub.whatsapp_number = '+6597106689';
