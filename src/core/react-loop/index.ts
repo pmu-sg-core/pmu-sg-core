@@ -123,7 +123,6 @@ async function executeIntent(
         .from('site_diary_entries')
         .upsert({
           site_project_id: resolvedProjectId,
-          intake_log_id: params.sourceMessageId ?? null,
           report_date: reportDate,
           weather_am: diary.metadata.weather.am,
           weather_pm: diary.metadata.weather.pm,
@@ -354,11 +353,14 @@ export async function runAgentLoop(params: {
 
   const llmReply = decomposeResult.reply;
   const execReplies = replies.filter(Boolean);
-  const finalReply = execReplies.length > 0
-    ? (llmReply && !execReplies.some(r => llmReply.includes(r)) ? `${llmReply}\n\n${execReplies.join('\n\n')}` : execReplies.join('\n\n'))
-    : llmReply;
-
   const primaryType = newIntents[0]?.type ?? 'general_inquiry';
+  // For domain-executor intents (BCA etc.), use executor reply only — LLM reply may hallucinate constraints
+  const useExecOnly = execReplies.length > 0 && primaryType.startsWith('bca.');
+  const finalReply = useExecOnly
+    ? execReplies.join('\n\n')
+    : execReplies.length > 0
+      ? (llmReply && !execReplies.some(r => llmReply.includes(r)) ? `${llmReply}\n\n${execReplies.join('\n\n')}` : execReplies.join('\n\n'))
+      : llmReply;
 
   return {
     reply: finalReply, classification: primaryType, confidence: decomposeResult.confidence,
