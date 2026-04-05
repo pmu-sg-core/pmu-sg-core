@@ -1,12 +1,13 @@
 -- ============================================================
 -- BCA Flow Test Data — CloudLabHub
 -- Email: admin@cloudlabhub.sg
+-- Phone: +6597106689
 -- Run in Supabase SQL editor (project: qpwpcdvqntumbnayimgn)
 -- ============================================================
 
 BEGIN;
 
--- 1. Subscriber (organisation, construction sector, BCA enabled)
+-- 1. Subscriber — upsert by email (safe to re-run)
 INSERT INTO public.subscriber (
     id, subscriber_type, display_name, email, country_code,
     uen, sector, sector_tags
@@ -22,56 +23,51 @@ VALUES (
     '{bca}'
 )
 ON CONFLICT (email) DO UPDATE SET
-    uen          = EXCLUDED.uen,
-    sector       = EXCLUDED.sector,
-    sector_tags  = EXCLUDED.sector_tags;
+    uen         = EXCLUDED.uen,
+    sector      = EXCLUDED.sector,
+    sector_tags = EXCLUDED.sector_tags;
 
--- 2. Subscription (pro plan, linked to subscriber, test WhatsApp number)
-INSERT INTO public.subscriptions (
-    id, plan_type, whatsapp_number, subscriber_id,
-    tasks_created_this_month, pilot_tasks_used
-)
-VALUES (
-    'bb000002-0000-0000-0000-000000000002',
-    'pro',
-    '+6597106689',
-    'bb000001-0000-0000-0000-000000000001',
-    0, 0
-)
-ON CONFLICT (whatsapp_number) DO UPDATE SET
-    plan_type     = EXCLUDED.plan_type,
-    subscriber_id = EXCLUDED.subscriber_id;
+-- 2. Subscription — update existing row by phone number
+-- Links the subscriber and upgrades to pro plan for BCA testing
+UPDATE public.subscriptions
+SET
+    subscriber_id = 'bb000001-0000-0000-0000-000000000001',
+    plan_type     = 'pro'
+WHERE whatsapp_number = '+6597106689';
 
--- 3. Site Project (linked to subscription above)
+-- 3. Site Project — upsert linked to the subscription above
 INSERT INTO public.site_projects (
     id, subscription_id, project_ref, uen, project_name, address,
     lat, long, geolocation_verified
 )
-VALUES (
+SELECT
     'bb000003-0000-0000-0000-000000000003',
-    'bb000002-0000-0000-0000-000000000002',
+    sub.id,
     '202500001A-PRJ001',
     '202500001A',
     'Toa Payoh Integrated Hub — Block A',
     '1 Toa Payoh Lor 8, Singapore 319253',
     1.331974, 103.848465,
     FALSE
-)
+FROM public.subscriptions sub
+WHERE sub.whatsapp_number = '+6597106689'
 ON CONFLICT (subscription_id, project_ref) DO NOTHING;
 
 COMMIT;
 
 
 -- ============================================================
--- Verification query — run separately after seeding
+-- Verification — run separately after seeding
 -- ============================================================
 
 -- SELECT
+--     sub.id              AS subscription_id,
 --     sub.plan_type,
+--     sr.email,
 --     sr.sector,
 --     sr.sector_tags,
 --     sr.uen,
---     sp.id            AS site_project_id,
+--     sp.id               AS site_project_id,
 --     sp.project_ref,
 --     sp.project_name
 -- FROM public.subscriptions sub
