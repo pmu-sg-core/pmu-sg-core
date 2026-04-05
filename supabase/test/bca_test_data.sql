@@ -28,11 +28,9 @@ ON CONFLICT (email) DO UPDATE SET
     sector_tags = EXCLUDED.sector_tags;
 
 -- 2. Subscription — update existing row by phone number
--- Links the subscriber and upgrades to pro plan for BCA testing
+-- Links the subscriber only; plan_type is left as-is
 UPDATE public.subscriptions
-SET
-    subscriber_id = 'bb000001-0000-0000-0000-000000000001',
-    plan_type     = 'pro'
+SET subscriber_id = 'bb000001-0000-0000-0000-000000000001'
 WHERE whatsapp_number = '+6597106689';
 
 -- 3. Site Project — upsert linked to the subscription above
